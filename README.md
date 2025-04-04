@@ -1,8 +1,8 @@
 # PROJECT NAME
-Standard Project Template for Databricks Labs Projects
+SLOG - Storage Log Assessment
 
 ## Project Description
-Short description of project's purpose
+Understanding of what is accessing data leveraging Cloud Native Storage and Information Schema in Databricks
 
 ## Project Support
 Please note that all projects in the /databrickslabs github account are provided for your exploration only, and are not formally supported by Databricks with Service Level Agreements (SLAs).  They are provided AS-IS and we do not make any guarantees of any kind.  Please do not submit a support ticket relating to any issues arising from the use of these projects.
