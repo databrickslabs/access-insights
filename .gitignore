@@ -1,1 +1,2 @@
 /azure/queries/seeding.sql
+/azure/queries/vw_serverless_audit.sql
