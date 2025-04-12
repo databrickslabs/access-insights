@@ -1,0 +1,1 @@
+REFRESH MATERIALIZED VIEW slog.default.vw_storageLogs_information_schema;
