@@ -1,18 +1,22 @@
-create or replace materialized view slog.default.vw_storageLogs_information_schema schedule every 4 hours as
+create or replace materialized view slog.default.vw_storageLogs_information_schema 
+as
 (
   SELECT
+    to_timestamp(sl.time) `Storage_Time`,
     case
       when it.table_name is not null then 1
       else 0
     end as `Match_Found`,
     properties.clientRequestId `Storage_ClientRequestId`,
+    properties.userAgentHeader `Storage_userAgentHeader`,
+    protocol `Storage_Protocol`,
     correlationId `Storage_CorrelationId`,
     identity.type `Storage_AuthenticationType`,
     sl.identity.requester.tenantId `Storage_TenantId`,
     sl.identity.requester.objectId `Storage_PrincipalId`,
     sl.statusText `Storage_StatusText`,
     sl.operationName `Storage_OperationName`,
-    to_timestamp(sl.time) `Storage_Time`,
+    regexp_extract(identity.authorization[0].action, '[^/]+$', 0) `Storage_Action`,
     sl.callerIpAddress `Storage_CallerIpAddress`,
     sl.properties.accountName `Storage_AccountName`,
     sl.properties.objectKey `Storage_RelativePath`,
@@ -43,8 +47,8 @@ create or replace materialized view slog.default.vw_storageLogs_information_sche
         where
           table_catalog <> 'system'
           and storage_path is not null
-        union 
-          select
+        union
+        select
           concat(volume_catalog, '.', volume_schema, '.', volume_name) as volume_name,
           storage_location,
           CONCAT(
