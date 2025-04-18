@@ -9,14 +9,13 @@ Please note that all projects in the /databrickslabs github account are provided
 
 Any issues discovered through the use of this project should be filed as GitHub Issues on the Repo.  They will be reviewed as time permits, but there are no formal SLAs for support.
 
-
 ## Prerequisites
 Cloud Storage Events need to be captured in order to begin understanding the distribution of Managed and External tables.  Below is a breakdown of how that may be achieved in Azure and AWS.  This repo provides the setup for both, but assumes that the resources are provisioned in advance.
 
 ### Azure
 Storage Logs in Azure will need to be routed to a central location via Diagnostic Settings.  Route them to an Central Event Hub or Storage Account
 
-#### Configure Storage Account for Logs
+#### [OPTION 1]: Configure Storage Account for Logs
 
 1.  **Navigate to your Storage Account** in the Azure portal.
 2.  In the left-hand menu, under "Monitoring," select **Diagnostic settings**.
@@ -30,7 +29,7 @@ Storage Logs in Azure will need to be routed to a central location via Diagnosti
 7.  Choose your **Storage account** where logs will be stored.
 8.  Click **Save**.
 
-#### : Register Central Storage Account in Databricks Unity Catalog for Storage Logs
+#### Register Central Storage Account in Databricks Unity Catalog for Storage Logs
 
 1.  In your Azure Databricks workspace, navigate to the **Catalog** section.
 2.  Create a new **External Location**.
@@ -40,7 +39,7 @@ Storage Logs in Azure will need to be routed to a central location via Diagnosti
 6.  Click **Create**.
 7.  Do this for Read, Write, and Delete locations
 
-#### Configure Event Hub for Diagnostic Logs
+#### [OPTION 2]: Configure Event Hub for Diagnostic Logs
 
 1.  **Navigate to your Event Hub Namespace** in the Azure portal.
 2.  In the left-hand menu, under "Monitoring," select **Diagnostic settings**.
@@ -72,4 +71,7 @@ e.g for Azure, run /azure/setup/Eventhub Storage Log Setup.ipynb.  This setup as
 1. Review the Notebook SLOG - Exploration in the /azure/notebooks area to and determine the distribution of external tables across your accounts.
 2. Review which tables are good candidates for migration.  These are tables that are flagged in the azure/notebooks/SLOG Exploration.ipynb notebook as good candidates.  
 3. **Repeat**
+
+##### Non-UC Paths
+1.  The exploration notebook has another query that interrogates paths with _delta_log to determine other candidates that may orginate from HMS or stricly paths.  
 
