@@ -1,0 +1,26 @@
+resources:
+  jobs:
+    eventhub_storage_log_setup:
+      name: eventhub_storage_log_setup
+      email_notifications:
+        on_failure:
+          - samer.zabaneh@databricks.com
+        no_alert_for_skipped_runs: true
+      trigger:
+        pause_status: UNPAUSED
+        periodic:
+          interval: 4
+          unit: HOURS
+      tasks:
+        - task_key: eventhub_storage_log_setup
+          notebook_task:
+            notebook_path: /Workspace/Shared/slog/setup/azure/eventhub_storage_log_setup
+            source: WORKSPACE
+        - task_key: materialize_data
+          depends_on:
+            - task_key: eventhub_storage_log_setup
+          sql_task:            
+            file:
+              path: /azure/queries/refresh_slog.default.vw_storageLogs_information_schema.sql
+              source: WORKSPACE
+            warehouse_id: 218e02a6867cea5d
