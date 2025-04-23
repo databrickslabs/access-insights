@@ -4,7 +4,11 @@ SLOG - Storage Log Assessment
 
 ## Project Description
 
-SLOG helps customers understand the distribution of their data in Cloud Storage in terms of Unity Catalog Managed vs External.  It then delves into whether or not the External Tables are being leveraged by external tools.  This is to identify good candidates for migration to Managed.  Managed tables provide benefits like Predictive Optimization performing maintenance operations at the right time.
+SLOG helps customers understand the distribution of their data in Cloud Storage in terms of [Unity Catalog Managed vs External](https://docs.databricks.com/aws/en/data-governance/unity-catalog/#managed-versus-external-tables-and-volumes) to help them find good candidates for migration from External to Managed configuration. It explores whether or not External Tables are leveraged by external tools.  
+
+## Why Migrate
+
+Managed tables provide numerous benefits over External tables (Predictive Optimization as one example) and is the preferred configuration for tables in Unity Catalog. 
 
 ## Project Support
 
@@ -18,7 +22,7 @@ Cloud Storage Events need to be captured in order to begin understanding the dis
 
 ### Azure
 
-Storage Logs in Azure will need to be routed to a central location via Diagnostic Settings.  Route them to an Central Event Hub or Storage Account
+Storage Logs in Azure will need to be routed to a central location via Diagnostic Settings.  Route them to a Central Event Hub or Storage Account
 
 #### [OPTION 1]: Configure Storage Account for Logs
 
@@ -80,8 +84,8 @@ e.g for Azure, run /azure/setup/Eventhub Storage Log Setup.ipynb.  This setup as
 
 ## Insights
 
-1. Review the Notebook SLOG - Exploration in the /azure/notebooks area to and determine the distribution of external tables across your accounts.
-2. Review which tables are good candidates for migration.  These are tables that are flagged in the azure/notebooks/SLOG Exploration.ipynb notebook as good candidates.  
+1. Review the Notebook SLOG - Exploration in /azure/notebooks to determine the distribution of external tables across your accounts.
+2. Review which tables are good candidates for migration.  Tables that are flagged in the azure/notebooks/SLOG Exploration.ipynb notebook are good candidates.  
 3. **Repeat**
 
 ### Non-UC Paths
