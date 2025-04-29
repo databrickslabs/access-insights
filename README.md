@@ -116,13 +116,12 @@ Ensure all prerequisites are setup, secret scope and values are correct, and var
 databricks bundle deploy
 ```
 
-2. Navigate the deployed pipeline, trigger the first run, and wait for successful completion 
+2. Navigate to the deployed pipeline, trigger the first run, and wait for successful completion 
 
 ## Insights
 
 1. Run the notebook `SLOG - Exploration` under `/azure/notebooks` to determine the distribution of external tables across your accounts.
-2. Review the visuals for the tables are good candidates for migration.  
-  - Tables that are flagged in the notebook are good candidates.  
+2. Review the visuals for the tables that are good candidates for migration.  
 3. **Repeat**
 
 ### Non-UC Paths
