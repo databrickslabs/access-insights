@@ -1,4 +1,4 @@
-CREATE MATERIALIZED VIEW IF NOT EXISTS slog.default.azure_storage_logs_vw
+CREATE MATERIALIZED VIEW IF NOT EXISTS IDENTIFIER(:catalog || '.' || :schema || '.' || :materialized_table)
 AS
 (
   SELECT
@@ -24,7 +24,7 @@ AS
     it.table_name `IT_TableName`,
     it.table_type `IT_TableType`
   FROM
-    slog.default.azure_raw_storage_logs sl
+    IDENTIFIER(:catalog || '.' || :schema || '.' || :raw_table) sl
       left join (
         select
           concat(table_catalog, '.', table_schema, '.', table_name) as table_name,
@@ -73,4 +73,4 @@ AS
         on sl.properties.objectKey like concat('%', it.parsed_path, '%')
 );
 
-REFRESH MATERIALIZED VIEW slog.default.azure_storage_logs_vw;
+REFRESH MATERIALIZED VIEW IDENTIFIER(:catalog || '.' || :schema || '.' || :materialized_table);

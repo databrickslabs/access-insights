@@ -20,3 +20,4 @@ resources:
             file:
               path: ../queries/refresh_slog.default.azure_storage_logs_vw.sql
             warehouse_id: ${var.warehouse}
+            parameters: ${var.sql_params}

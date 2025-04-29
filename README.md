@@ -1,4 +1,4 @@
-# PROJECT NAME
+# SLOG
 
 SLOG - Storage Log Assessment
 
@@ -59,33 +59,70 @@ Storage Logs in Azure will need to be routed to a central location via Diagnosti
 7. Choose your **Event Hub Namespace** and the specific **Event Hub** where logs will be sent.
 8. Click **Save**.
 
-## Verification
+#### Verification
 
 * After a short period, you should see logs appearing in your specified Storage Account containers and Event Hub.
 * You can verify the External Location setup in Databricks Unity Catalog by browsing the location and ensuring you can access the files.
 
-## Note
+#### Note
 
 * Ensure that the necessary IAM permissions are in place for Databricks to access the Storage Account and Event Hub.
 * Adjust the log categories selected based on your specific monitoring requirements.
 * For detailed instructions on Azure Diagnostic Settings, refer to the official Azure documentation.
 
-## Setup
+### Azure Pipeline Setup
 
-1. Run the notebook provided after the prerequiste steps were met.  
-e.g for Azure, run /azure/setup/Eventhub Storage Log Setup.ipynb.  This setup assumes senstive information is managed through Secret Scope in Databricks.
-2. The setup requires a few parameters to consider, target table name, path for checkpoint.
-3. Create the Materialized View which joins the raw audit logs with Information Schema found here azure/queries/slog.default.azure_storage_logs_vw.sql
-4. Configure and run the workflow provided here at your scheduled preference. azure/setup/workflow/eventhub_storage_log_workflow.yml
+The first time the pipeline runs it will setup a catalog and schema for the output table `azure_raw_storage_logs`, and materialized view named `azure_storage_logs` under the same catalog and schema.
 
-* This pipeline has a dependency on azure/queries/refresh_slog.default.azure_storage_logs_vw.sql
+All injected variables can be edited in the file `databricks.yml`. Below are the variables, description, and usage.
 
-5. Run the pipeline and wait for successful completion before proceeding to the notebook for exploration.
+#### Variables 
+
+- `catalog`: 
+  - value: `slog` 
+  - description: target catalog for tables and views to be created
+- `schema`: 
+  - value: `default`
+  - description: target schema for tables and views to be created
+- `raw_table`: 
+  - value: `azure_raw_storage_logs`
+  - description: table containing the raw data from the eventhub
+- `materialzed_table`: 
+  - value: `azure_storage_logs_vw`
+  - description: name of the materialized view created off of the `raw_table` name
+- `checkpoint`: 
+  - value: `abfss://slog@stsezsandbox07.dfs.core.windows.net/checkpoints/azure_raw_storage_log` 
+  - description: external location for the checkpoint path for the streaming operation
+- `secret-scope`:
+  - value: `slog-scope` 
+  - description: secret scope used in the pipeline
+- `eh-namespace`: 
+  - value: `eh-namespace` 
+  - description: the eventhub namespace where the storage logs are sent to, and is gathered from the secret scope
+- `eh-name`: 
+  - value: `slog`
+  - description: the eventhub name
+- `eh-conn-string`:
+  - value: `eh-slog`
+  - description: the connect string for the eventhub, and is gathered from the secret scope
+
+#### Pipeline Run
+
+Ensure all prerequisites are setup, secret scope and values are correct, and variables are verified.
+
+1. Deploy the pipeline using the databricks cli and asset bundles via the command 
+
+```sh
+databricks bundle deploy
+```
+
+2. Navigate the deployed pipeline, trigger the first run, and wait for successful completion 
 
 ## Insights
 
-1. Review the Notebook SLOG - Exploration in /azure/notebooks to determine the distribution of external tables across your accounts.
-2. Review which tables are good candidates for migration.  Tables that are flagged in the azure/notebooks/SLOG Exploration.ipynb notebook are good candidates.  
+1. Run the notebook `SLOG - Exploration` under `/azure/notebooks` to determine the distribution of external tables across your accounts.
+2. Review the visuals for the tables are good candidates for migration.  
+  - Tables that are flagged in the notebook are good candidates.  
 3. **Repeat**
 
 ### Non-UC Paths
