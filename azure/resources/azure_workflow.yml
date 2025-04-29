@@ -3,7 +3,7 @@ resources:
     slog:
       name: slog_eventhub_workflow
       trigger:
-        pause_status: UNPAUSED
+        pause_status: PAUSED
         periodic:
           interval: 4
           unit: HOURS
