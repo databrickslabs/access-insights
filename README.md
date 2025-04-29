@@ -75,10 +75,10 @@ Storage Logs in Azure will need to be routed to a central location via Diagnosti
 1. Run the notebook provided after the prerequiste steps were met.  
 e.g for Azure, run /azure/setup/Eventhub Storage Log Setup.ipynb.  This setup assumes senstive information is managed through Secret Scope in Databricks.
 2. The setup requires a few parameters to consider, target table name, path for checkpoint.
-3. Create the Materialized View which joins the raw audit logs with Information Schema found here azure/queries/slog.default.vw_storageLogs_information_schema.sql
+3. Create the Materialized View which joins the raw audit logs with Information Schema found here azure/queries/slog.default.azure_storage_logs_vw.sql
 4. Configure and run the workflow provided here at your scheduled preference. azure/setup/workflow/eventhub_storage_log_workflow.yml
 
-* This pipeline has a dependency on azure/queries/refresh_slog.default.vw_storageLogs_information_schema.sql
+* This pipeline has a dependency on azure/queries/refresh_slog.default.azure_storage_logs_vw.sql
 
 5. Run the pipeline and wait for successful completion before proceeding to the notebook for exploration.
 

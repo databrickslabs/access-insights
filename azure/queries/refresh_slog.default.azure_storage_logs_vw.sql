@@ -1,5 +1,5 @@
-create or replace materialized view slog.default.vw_storageLogs_information_schema 
-as
+CREATE MATERIALIZED VIEW IF NOT EXISTS slog.default.azure_storage_logs_vw
+AS
 (
   SELECT
     to_timestamp(sl.time) `Storage_Time`,
@@ -71,4 +71,6 @@ as
           and storage_location is not null
       ) it
         on sl.properties.objectKey like concat('%', it.parsed_path, '%')
-)
+);
+
+REFRESH MATERIALIZED VIEW slog.default.azure_storage_logs_vw;

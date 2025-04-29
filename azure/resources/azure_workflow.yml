@@ -1,0 +1,22 @@
+resources:
+  jobs:
+    slog:
+      name: slog_eventhub_workflow
+      trigger:
+        pause_status: UNPAUSED
+        periodic:
+          interval: 4
+          unit: HOURS
+      tasks:
+        - task_key: read_eventhub_storage_logs
+          notebook_task:
+            notebook_path: ../notebooks/Eventhub_Storage_Log_Setup.ipynb
+            base_parameters: ${var.notebook_params}
+
+        - task_key: refresh_materialize_slog_table
+          depends_on:
+            - task_key: read_eventhub_storage_logs
+          sql_task:            
+            file:
+              path: ../queries/refresh_slog.default.azure_storage_logs_vw.sql
+            warehouse_id: ${var.warehouse}

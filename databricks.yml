@@ -1,19 +1,36 @@
-# This is a Databricks asset bundle definition for slog.
-# The Databricks extension requires databricks.yml configuration file.
-# See https://docs.databricks.com/dev-tools/bundles/index.html for documentation.
-
 bundle:
   name: slog
+
+include:
+  - azure/resources/*.yml
+
+variables:
+  warehouse:
+    description: "warehouse id"
+    lookup:
+      warehouse: 'sez3'
+  notebook_params:
+    description: "list of parameters passed into the notebook via widgets"
+    type: complex
+    default:
+      catalog: 'slog'
+      schema: 'default'
+      table: 'azure_raw_storage_logs'
+      checkpoint: 'abfss://slog@stsezsandbox07.dfs.core.windows.net/checkpoints/azure_raw_storage_log'
+      secret-scope: 'slog-scope'
+      eh-namespace: 'eh-namespace'
+      eh-name: 'slog'
+      eh-conn-string: 'eh-slog'
 
 targets:
   dev:
     mode: development
     default: true
     workspace:
-      host: https://adb-1720970340056130.10.azuredatabricks.net
+      host: https://adb-1720970340056130.10.azuredatabricks.net/
 
   ## Optionally, there could be 'staging' or 'prod' targets here.
   #
   # prod:
   #   workspace:
-  #     host: https://adb-1720970340056130.10.azuredatabricks.net
+  #     host: ${workspace_url}
