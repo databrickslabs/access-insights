@@ -4,32 +4,6 @@ bundle:
 include:
   - azure/resources/*.yml
 
-variables:
-  warehouse:
-    description: "warehouse id"
-    lookup:
-      warehouse: 'sez3' # change this to the name of the target warehouse
-  notebook_params:
-    description: "list of parameters passed into the notebook via widgets"
-    type: complex
-    default:
-      catalog: 'slog'
-      schema: 'default'
-      raw_table: 'azure_raw_storage_logs'
-      checkpoint: 'abfss://slog@stsezsandbox07.dfs.core.windows.net/checkpoints/azure_raw_storage_log'
-      secret-scope: 'slog-scope'
-      eh-namespace: 'eh-namespace'
-      eh-name: 'slog'
-      eh-conn-string: 'eh-slog'
-  sql_params:
-    description: "parameters passed into the sql task"
-    type: complex
-    default:
-      catalog: 'slog'
-      schema: 'default'
-      raw_table: 'azure_raw_storage_logs'
-      materialized_table: 'azure_storage_logs_vw'
-
 targets:
   dev:
     mode: development
