@@ -18,4 +18,4 @@ resources:
       channel: PREVIEW
       libraries:
         - file:
-            path: ../pipelines/aws_storage_logs.py
+            path: ../pipelines/aws_storage_logs.py # TODO this needs to be changed

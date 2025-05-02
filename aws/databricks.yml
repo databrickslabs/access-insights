@@ -2,7 +2,7 @@ bundle:
   name: slog
 
 include:
-  - azure/resources/*.yml
+  - resources/*.yml
 
 targets:
   dev:
