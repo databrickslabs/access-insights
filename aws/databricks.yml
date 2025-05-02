@@ -1,0 +1,18 @@
+bundle:
+  name: slog
+
+include:
+  - resources/*.yml
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-1720970340056130.10.azuredatabricks.net/ # modify the target workspace 
+
+  ## Optionally, there could be 'staging' or 'prod' targets here.
+  #
+  # prod:
+  #   workspace:
+  #     host: ${workspace_url}

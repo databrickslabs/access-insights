@@ -1,0 +1,21 @@
+resources:
+  pipelines:
+    aws_slog_pipeline:
+      name: aws_slog_pipeline
+      catalog: slog
+      schema: default
+      configuration:
+        bundle.sourcePath: ${workspace.file_path}/aws
+      clusters:
+        - label: default
+          autoscale:
+            min_workers: 1
+            max_workers: 2
+            mode: ENHANCED
+      development: true
+      photon: true
+      edition: PRO
+      channel: PREVIEW
+      libraries:
+        - file:
+            path: ../pipelines/aws_storage_logs.py # TODO this needs to be changed

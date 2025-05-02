@@ -1,0 +1,27 @@
+resources:
+  pipelines:
+    azure_slog_pipeline:
+      name: azure_slog_pipeline
+      catalog: slog
+      schema: default
+      configuration:
+        bundle.sourcePath: ${workspace.file_path}/azure
+        secret-scope: slog-scope
+        eh-name: slog
+        eh-namespace: eh-namespace
+        eh-slogs-client-id: eh-slogs-client-id
+        eh-slogs-client-secret: eh-slogs-client-secret
+        eh-slogs-tenant-id: eh-slogs-tenant-id
+      clusters:
+        - label: default
+          autoscale:
+            min_workers: 1
+            max_workers: 2
+            mode: ENHANCED
+      development: true
+      photon: true
+      edition: PRO
+      channel: PREVIEW
+      libraries:
+        - file:
+            path: ../pipelines/azure_storage_logs.py

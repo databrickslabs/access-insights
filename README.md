@@ -1,4 +1,4 @@
-# PROJECT NAME
+# SLOG
 
 SLOG - Storage Log Assessment
 
@@ -25,22 +25,29 @@ Cloud Storage Events need to be captured in order to view the distribution of Ma
 
 The rest of the repo assumes that the resources are provisioned.
 
-## Setup (Azure)
+Storage Logs in Azure will need to be routed to a central location via Diagnostic Settings.  Route them to a Central Event Hub or Storage Account
 
-1. Run the notebook provided after the prerequiste steps were met.  
-e.g for Azure, run /azure/setup/Eventhub Storage Log Setup.ipynb.  This setup assumes senstive information is managed through Secret Scope in Databricks.
-2. The setup requires a few parameters to consider, target table name, path for checkpoint.
-3. Run the [vw_storage_logs_information_schema.sql](azure/queries/vw_storage_logs_information_schema.sql) query to create a Materialized View which joins the raw audit logs with Information Schema.
-4. Configure and run the workflow [eventhub_storage_log_workflow.yml](azure/setup/workflow/eventhub_storage_log_workflow.yml) at your scheduled preference. 
-* Run the [refresh query](azure/queries/refresh_slog.default.vw_storageLogs_information_schema.sql) if an updated Materialized View is required before running the pipeline
-5. Run the pipeline and wait for successful completion before proceeding to the notebook for exploration.
+#### Pipeline Run
 
-## Insights (Azure)
+Ensure all prerequisites are setup, secret scope and values are correct, and variables are verified.
+
+1. Clone the Repo
+2. Deploy the pipeline using the databricks cli and asset bundles via the command 
+
+```sh
+cd azure && databricks bundle deploy
+```
+
+
+3. Navigate to the deployed pipeline, trigger the first run, and wait for successful completion 
+
+
+## Insights
 
 1. Review [Notebook SLOG - Exploration](azure/notebooks/SLOG%20Exploration.ipynb) to determine the distribution of external tables across your accounts.
 2. Review which tables are good candidates for migration.  Tables that are flagged in the notebook are good candidates.  
-3. **Repeat**
 
 ### Non-UC Paths
 
-1. The exploration notebook has another query that interrogates paths with _delta_log to determine other candidates that may orginate from HMS or stricly paths.  
+1. The exploration notebook has another query that interrogates paths with _delta_log to determine other candidates that may originate from HMS or strictly paths.  
+
