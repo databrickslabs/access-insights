@@ -18,10 +18,14 @@ Any issues discovered through the use of this project should be filed as GitHub 
 
 ## Prerequisites
 
-Cloud Storage Events need to be captured in order to begin understanding the distribution of Managed and External tables.  Below is a breakdown of how that may be achieved in Azure and AWS.  This repo provides the setup for both, but assumes that the resources are provisioned in advance.
+Cloud Storage Events need to be captured in order to view the distribution of Managed and External tables. See the README files in the Azure and AWS folders for a guide on setting these up properly.
+ 
+- [AWS](aws/README.md)
+- [Azure](azure/README.md)
 
-### Azure
+The rest of the repo assumes that the resources are provisioned.
 
+<<<<<<< HEAD
 Storage Logs in Azure will need to be routed to a central location via Diagnostic Settings.  Route them to a Central Event Hub or Storage Account
 
 #### [OPTION 1]: Configure Storage Account for Logs
@@ -117,11 +121,27 @@ databricks bundle deploy
 ```
 
 2. Navigate to the deployed pipeline, trigger the first run, and wait for successful completion 
+=======
+## Setup (Azure)
 
-## Insights
+1. Run the notebook provided after the prerequiste steps were met.  
+e.g for Azure, run /azure/setup/Eventhub Storage Log Setup.ipynb.  This setup assumes senstive information is managed through Secret Scope in Databricks.
+2. The setup requires a few parameters to consider, target table name, path for checkpoint.
+3. Run the [vw_storage_logs_information_schema.sql](azure/queries/vw_storage_logs_information_schema.sql) query to create a Materialized View which joins the raw audit logs with Information Schema.
+4. Configure and run the workflow [eventhub_storage_log_workflow.yml](azure/setup/workflow/eventhub_storage_log_workflow.yml) at your scheduled preference. 
+* Run the [refresh query](azure/queries/refresh_slog.default.vw_storageLogs_information_schema.sql) if an updated Materialized View is required before running the pipeline
+5. Run the pipeline and wait for successful completion before proceeding to the notebook for exploration.
+>>>>>>> master
 
+## Insights (Azure)
+
+<<<<<<< HEAD
 1. Run the notebook `SLOG - Exploration` under `/azure/notebooks` to determine the distribution of external tables across your accounts.
 2. Review the visuals for the tables that are good candidates for migration.  
+=======
+1. Review [Notebook SLOG - Exploration](azure/notebooks/SLOG%20Exploration.ipynb) to determine the distribution of external tables across your accounts.
+2. Review which tables are good candidates for migration.  Tables that are flagged in the notebook are good candidates.  
+>>>>>>> master
 3. **Repeat**
 
 ### Non-UC Paths
