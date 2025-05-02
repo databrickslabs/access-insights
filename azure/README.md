@@ -1,4 +1,3 @@
-
 # Azure Prerequisites
 
 Storage Logs in Azure will need to be routed to a central location via Diagnostic Settings.  Route them to a Central Event Hub or Storage Account
@@ -48,5 +47,7 @@ Storage Logs in Azure will need to be routed to a central location via Diagnosti
 ## Note
 
 * Ensure that the necessary IAM permissions are in place for Databricks to access the Storage Account and Event Hub.
+  - Refer to [Configure the Structured Streaming Kafka Connector](https://learn.microsoft.com/en-us/azure/databricks/connect/streaming/kafka#configuring-the-structured-streaming-kafka-connector) for additional help
 * Adjust the log categories selected based on your specific monitoring requirements.
 * For detailed instructions on Azure Diagnostic Settings, refer to the official Azure documentation.
+* Adjust the asset bundle settings under `/resources` for specific deployment considerations
