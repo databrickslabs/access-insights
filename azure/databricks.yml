@@ -1,8 +1,30 @@
 bundle:
   name: slog
 
+variables:
+  warehouse_id:
+    description: An existing warehouse
+    lookup:
+      warehouse: 'Starter Endpoint'
+
+  pipeline_configuration:
+    description: Pipeline configuraiton details 
+    type: complex 
+    default:
+      bundle.sourcePath: ${workspace.file_path}
+      secret-scope: slog-scope
+      eh-name: slog
+      eh-namespace: eh-namespace
+      eh-slogs-client-id: eh-slogs-client-id
+      eh-slogs-client-secret: eh-slogs-client-secret
+      eh-slogs-tenant-id: eh-slogs-tenant-id
+
 include:
   - resources/*.yml
+
+sync:
+  include:
+    - pipelines/*.py
 
 targets:
   dev:

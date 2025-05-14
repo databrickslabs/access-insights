@@ -1,0 +1,10 @@
+[project]
+name = "slog"
+version = "0.1.0"
+description = "Slog Audit"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "databricks-connect==15.4",
+    "databricks-dlt>=0.3.0",
+]
