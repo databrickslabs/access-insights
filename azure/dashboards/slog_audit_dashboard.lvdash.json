@@ -1,0 +1,2569 @@
+{
+  "datasets": [
+    {
+      "displayName": "actions_overtime",
+      "name": "c7a73033",
+      "query": "SELECT\n  storage_time,\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  category,\n  operationName,\n  statusText,\n  durationMs,\n  callerIpAddress,\n  authType,\n  authObjectId,\n  userAgentHeader,\n  clientRequestId,\n  objectKey\nFROM slog.default.azure_storage_logs"
+    },
+    {
+      "displayName": "table_details",
+      "name": "0b4a4101",
+      "query": "SELECT \n    table_catalog,\n    table_schema,\n    table_name,\n    full_namespace,\n    storage_path,\n    parsed_path,\n    table_type,\n    data_source_format,\n    status,\n    CASE WHEN status IS NOT NULL THEN 'Failed to Gather Details' ELSE NULL END AS error\nFROM slog.default.all_table_details"
+    },
+    {
+      "displayName": "actions_counts",
+      "name": "37d08591",
+      "query": "SELECT\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  authType,\n  authObjectId,\n  userAgentHeader,\n  CASE\n    WHEN\n      lower(userAgentHeader) like '%databricks%'\n      OR lower(userAgentHeader) like '%dbr%'\n      OR lower(userAgentHeader) like '%apn/1.0 unknown%'\n    THEN\n      'databricks'\n    ELSE 'external'\n  END as requester,\n  SUM(\n    CASE\n      WHEN category = 'StorageWrite' THEN 1\n      ELSE 0\n    END\n  ) AS StorageWrite,\n  SUM(\n    CASE\n      WHEN category = 'StorageDelete' THEN 1\n      ELSE 0\n    END\n  ) AS StorageDelete,\n  SUM(\n    CASE\n      WHEN category = 'StorageRead' THEN 1\n      ELSE 0\n    END\n  ) AS StorageRead\nFROM\n  slog.default.azure_storage_logs\nGROUP BY\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  authType,\n  authObjectId,\n  userAgentHeader,\n  requester"
+    },
+    {
+      "displayName": "recommendation",
+      "name": "89a92a69",
+      "query": "with cte_details as (\n  SELECT \n    storage_time,\n    subscription_id,\n    resource_group,\n    storage_account,\n    table_catalog,\n    table_schema,\n    table_name,\n    full_namespace,\n    storage_path,\n    table_type,\n    data_source_format,\n    category,\n    operationName,\n    statusText,\n    durationMs,\n    callerIpAddress,\n    authType,\n    authObjectId,\n    userAgentHeader,\n    clientRequestId,\n    objectKey,\n    CASE\n      WHEN\n        lower(userAgentHeader) like '%databricks%'\n        OR lower(userAgentHeader) like '%dbr%'\n        OR lower(userAgentHeader) like '%apn/1.0 unknown%'\n      THEN\n        'databricks'\n      ELSE 'external'\n    END as requester\n  from slog.default.azure_storage_logs\n)\nSELECT\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageRead\"\n        AND requester = 'external'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as external_read,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageWrite\"\n        AND requester = 'external'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as external_write,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageRead\"\n        AND requester = 'databricks'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as uc_read,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageWrite\"\n        AND requester = 'databricks'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as uc_write,\n  CASE\n    WHEN\n      external_read > 0\n      OR external_write > 0\n    THEN\n      'More Investigation Needed'\n    WHEN\n      external_read = 0\n      OR external_write = 0\n    THEN\n      'Good Candidate For Managed Table'\n  END AS recommendation\nFROM\n  cte_details\nGROUP BY\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format"
+    }
+  ],
+  "pages": [
+    {
+      "displayName": "main",
+      "layout": [
+        {
+          "position": {
+            "height": 4,
+            "width": 6,
+            "x": 0,
+            "y": 0
+          },
+          "widget": {
+            "name": "1fa7d8d8",
+            "textbox_spec": "# Table Migration Breakdown\n\nThis dashboard provides a high-level overview of both registered and unregistered tables, as well as how these tables are being accessed. External tables that are exclusively read and updated via Databricks Unity Catalog (UC) are ideal candidates for conversion to 'managed' tables. However, tables with external readers and writers require further investigation before being moved to ensure that other business processes are not disrupted.\n\nTables with the name 'foreign' are one where a specific registered table namespace could not be identified. This can happen due to pipeline authorization issues on a storage account, or the underlying table is only available in the storage account."
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 2,
+            "x": 0,
+            "y": 4
+          },
+          "widget": {
+            "name": "a51a1f86",
+            "queries": [
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_subscription_id",
+                "query": {
+                  "datasetName": "c7a73033",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`subscription_id`",
+                      "name": "subscription_id"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "subscription_id_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_subscription_id",
+                "query": {
+                  "datasetName": "37d08591",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`subscription_id`",
+                      "name": "subscription_id"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "subscription_id_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_subscription_id",
+                "query": {
+                  "datasetName": "89a92a69",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`subscription_id`",
+                      "name": "subscription_id"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "subscription_id_associativity"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "subscription_id",
+                    "fieldName": "subscription_id",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_subscription_id"
+                  },
+                  {
+                    "displayName": "subscription_id",
+                    "fieldName": "subscription_id",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_subscription_id"
+                  },
+                  {
+                    "displayName": "subscription_id",
+                    "fieldName": "subscription_id",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_subscription_id"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Subscription ID"
+              },
+              "version": 2,
+              "widgetType": "filter-multi-select"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 2,
+            "x": 2,
+            "y": 4
+          },
+          "widget": {
+            "name": "cefb13d1",
+            "queries": [
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_resource_group",
+                "query": {
+                  "datasetName": "c7a73033",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`resource_group`",
+                      "name": "resource_group"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "resource_group_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_resource_group",
+                "query": {
+                  "datasetName": "37d08591",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`resource_group`",
+                      "name": "resource_group"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "resource_group_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_resource_group",
+                "query": {
+                  "datasetName": "89a92a69",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`resource_group`",
+                      "name": "resource_group"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "resource_group_associativity"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "resource_group",
+                    "fieldName": "resource_group",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_resource_group"
+                  },
+                  {
+                    "displayName": "resource_group",
+                    "fieldName": "resource_group",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_resource_group"
+                  },
+                  {
+                    "displayName": "resource_group",
+                    "fieldName": "resource_group",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_resource_group"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Resource Group"
+              },
+              "version": 2,
+              "widgetType": "filter-multi-select"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 2,
+            "x": 4,
+            "y": 4
+          },
+          "widget": {
+            "name": "2d4e920d",
+            "queries": [
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_storage_account",
+                "query": {
+                  "datasetName": "c7a73033",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`storage_account`",
+                      "name": "storage_account"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "storage_account_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_storage_account",
+                "query": {
+                  "datasetName": "37d08591",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`storage_account`",
+                      "name": "storage_account"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "storage_account_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_storage_account",
+                "query": {
+                  "datasetName": "89a92a69",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`storage_account`",
+                      "name": "storage_account"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "storage_account_associativity"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "storage_account",
+                    "fieldName": "storage_account",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_storage_account"
+                  },
+                  {
+                    "displayName": "storage_account",
+                    "fieldName": "storage_account",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_storage_account"
+                  },
+                  {
+                    "displayName": "storage_account",
+                    "fieldName": "storage_account",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_storage_account"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Storage Account"
+              },
+              "version": 2,
+              "widgetType": "filter-multi-select"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 2,
+            "x": 0,
+            "y": 5
+          },
+          "widget": {
+            "name": "a0efee5a",
+            "queries": [
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_table_catalog",
+                "query": {
+                  "datasetName": "c7a73033",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_catalog`",
+                      "name": "table_catalog"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_catalog_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_table_catalog",
+                "query": {
+                  "datasetName": "0b4a4101",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_catalog`",
+                      "name": "table_catalog"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_catalog_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_table_catalog",
+                "query": {
+                  "datasetName": "89a92a69",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_catalog`",
+                      "name": "table_catalog"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_catalog_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_table_catalog",
+                "query": {
+                  "datasetName": "37d08591",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_catalog`",
+                      "name": "table_catalog"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_catalog_associativity"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "table_catalog",
+                    "fieldName": "table_catalog",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_table_catalog"
+                  },
+                  {
+                    "displayName": "table_catalog",
+                    "fieldName": "table_catalog",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_table_catalog"
+                  },
+                  {
+                    "displayName": "table_catalog",
+                    "fieldName": "table_catalog",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_table_catalog"
+                  },
+                  {
+                    "displayName": "table_catalog",
+                    "fieldName": "table_catalog",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_table_catalog"
+                  }
+                ]
+              },
+              "frame": {
+                "showDescription": false,
+                "showTitle": true,
+                "title": "Catalog"
+              },
+              "version": 2,
+              "widgetType": "filter-multi-select"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 2,
+            "x": 2,
+            "y": 5
+          },
+          "widget": {
+            "name": "e2dd8562",
+            "queries": [
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_table_schema",
+                "query": {
+                  "datasetName": "c7a73033",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_schema`",
+                      "name": "table_schema"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_schema_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_table_schema",
+                "query": {
+                  "datasetName": "0b4a4101",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_schema`",
+                      "name": "table_schema"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_schema_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_table_schema",
+                "query": {
+                  "datasetName": "37d08591",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_schema`",
+                      "name": "table_schema"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_schema_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_table_schema",
+                "query": {
+                  "datasetName": "89a92a69",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_schema`",
+                      "name": "table_schema"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_schema_associativity"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "table_schema",
+                    "fieldName": "table_schema",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_table_schema"
+                  },
+                  {
+                    "displayName": "table_schema",
+                    "fieldName": "table_schema",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_table_schema"
+                  },
+                  {
+                    "displayName": "table_schema",
+                    "fieldName": "table_schema",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_table_schema"
+                  },
+                  {
+                    "displayName": "table_schema",
+                    "fieldName": "table_schema",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_table_schema"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Schema"
+              },
+              "version": 2,
+              "widgetType": "filter-multi-select"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 2,
+            "x": 4,
+            "y": 5
+          },
+          "widget": {
+            "name": "d88813d1",
+            "queries": [
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_table_name",
+                "query": {
+                  "datasetName": "c7a73033",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_name`",
+                      "name": "table_name"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_name_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_table_name",
+                "query": {
+                  "datasetName": "0b4a4101",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_name`",
+                      "name": "table_name"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_name_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_table_name",
+                "query": {
+                  "datasetName": "37d08591",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_name`",
+                      "name": "table_name"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_name_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_table_name",
+                "query": {
+                  "datasetName": "89a92a69",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_name`",
+                      "name": "table_name"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_name_associativity"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "table_name",
+                    "fieldName": "table_name",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_table_name"
+                  },
+                  {
+                    "displayName": "table_name",
+                    "fieldName": "table_name",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_table_name"
+                  },
+                  {
+                    "displayName": "table_name",
+                    "fieldName": "table_name",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_table_name"
+                  },
+                  {
+                    "displayName": "table_name",
+                    "fieldName": "table_name",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_table_name"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Table"
+              },
+              "version": 2,
+              "widgetType": "filter-multi-select"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 2,
+            "x": 0,
+            "y": 6
+          },
+          "widget": {
+            "name": "0995313b",
+            "queries": [
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_table_type",
+                "query": {
+                  "datasetName": "c7a73033",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_type`",
+                      "name": "table_type"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_type_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_table_type",
+                "query": {
+                  "datasetName": "0b4a4101",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_type`",
+                      "name": "table_type"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_type_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_table_type",
+                "query": {
+                  "datasetName": "37d08591",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_type`",
+                      "name": "table_type"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_type_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_table_type",
+                "query": {
+                  "datasetName": "89a92a69",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_type`",
+                      "name": "table_type"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "table_type_associativity"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "table_type",
+                    "fieldName": "table_type",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_table_type"
+                  },
+                  {
+                    "displayName": "table_type",
+                    "fieldName": "table_type",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_table_type"
+                  },
+                  {
+                    "displayName": "table_type",
+                    "fieldName": "table_type",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_table_type"
+                  },
+                  {
+                    "displayName": "table_type",
+                    "fieldName": "table_type",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_table_type"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Table Type"
+              },
+              "version": 2,
+              "widgetType": "filter-multi-select"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 2,
+            "x": 2,
+            "y": 6
+          },
+          "widget": {
+            "name": "fc1de645",
+            "queries": [
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_data_source_format",
+                "query": {
+                  "datasetName": "c7a73033",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`data_source_format`",
+                      "name": "data_source_format"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "data_source_format_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_data_source_format",
+                "query": {
+                  "datasetName": "0b4a4101",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`data_source_format`",
+                      "name": "data_source_format"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "data_source_format_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_data_source_format",
+                "query": {
+                  "datasetName": "37d08591",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`data_source_format`",
+                      "name": "data_source_format"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "data_source_format_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_data_source_format",
+                "query": {
+                  "datasetName": "89a92a69",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`data_source_format`",
+                      "name": "data_source_format"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "data_source_format_associativity"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "data_source_format",
+                    "fieldName": "data_source_format",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_data_source_format"
+                  },
+                  {
+                    "displayName": "data_source_format",
+                    "fieldName": "data_source_format",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_data_source_format"
+                  },
+                  {
+                    "displayName": "data_source_format",
+                    "fieldName": "data_source_format",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_data_source_format"
+                  },
+                  {
+                    "displayName": "data_source_format",
+                    "fieldName": "data_source_format",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_data_source_format"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Table Format"
+              },
+              "version": 2,
+              "widgetType": "filter-multi-select"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 1,
+            "width": 2,
+            "x": 4,
+            "y": 6
+          },
+          "widget": {
+            "name": "aec590bc",
+            "queries": [
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_userAgentHeader",
+                "query": {
+                  "datasetName": "c7a73033",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`userAgentHeader`",
+                      "name": "userAgentHeader"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "userAgentHeader_associativity"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_userAgentHeader",
+                "query": {
+                  "datasetName": "37d08591",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`userAgentHeader`",
+                      "name": "userAgentHeader"
+                    },
+                    {
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
+                      "name": "userAgentHeader_associativity"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "userAgentHeader",
+                    "fieldName": "userAgentHeader",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_userAgentHeader"
+                  },
+                  {
+                    "displayName": "userAgentHeader",
+                    "fieldName": "userAgentHeader",
+                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_userAgentHeader"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "User Agent"
+              },
+              "version": 2,
+              "widgetType": "filter-multi-select"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 6,
+            "width": 6,
+            "x": 0,
+            "y": 10
+          },
+          "widget": {
+            "name": "2b854f12",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "89a92a69",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`recommendation`",
+                      "name": "recommendation"
+                    },
+                    {
+                      "expression": "`full_namespace`",
+                      "name": "full_namespace"
+                    },
+                    {
+                      "expression": "`storage_path`",
+                      "name": "storage_path"
+                    },
+                    {
+                      "expression": "`table_type`",
+                      "name": "table_type"
+                    },
+                    {
+                      "expression": "`data_source_format`",
+                      "name": "data_source_format"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "allowHTMLByDefault": false,
+              "condensed": true,
+              "encodings": {
+                "columns": [
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "recommendation",
+                    "fieldName": "recommendation",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 0,
+                    "preserveWhitespace": false,
+                    "title": "Recommendation",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "full_namespace",
+                    "fieldName": "full_namespace",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 6,
+                    "preserveWhitespace": false,
+                    "title": "Full Namespace",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "storage_path",
+                    "fieldName": "storage_path",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 8,
+                    "preserveWhitespace": false,
+                    "title": "Storage Path",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "table_type",
+                    "fieldName": "table_type",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 9,
+                    "preserveWhitespace": false,
+                    "title": "Table Type",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "data_source_format",
+                    "fieldName": "data_source_format",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 10,
+                    "preserveWhitespace": false,
+                    "title": "Table Format",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Table Recommendation Breakdown"
+              },
+              "invisibleColumns": [
+                {
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "string",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "subscription_id",
+                  "order": 1,
+                  "preserveWhitespace": false,
+                  "title": "subscription_id",
+                  "type": "string",
+                  "useMonospaceFont": false
+                },
+                {
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "string",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "resource_group",
+                  "order": 2,
+                  "preserveWhitespace": false,
+                  "title": "resource_group",
+                  "type": "string",
+                  "useMonospaceFont": false
+                },
+                {
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "string",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "table_catalog",
+                  "order": 3,
+                  "preserveWhitespace": false,
+                  "title": "table_catalog",
+                  "type": "string",
+                  "useMonospaceFont": false
+                },
+                {
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "string",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "table_schema",
+                  "order": 4,
+                  "preserveWhitespace": false,
+                  "title": "table_schema",
+                  "type": "string",
+                  "useMonospaceFont": false
+                },
+                {
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "string",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "table_name",
+                  "order": 5,
+                  "preserveWhitespace": false,
+                  "title": "table_name",
+                  "type": "string",
+                  "useMonospaceFont": false
+                },
+                {
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "string",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "storage_account",
+                  "order": 7,
+                  "preserveWhitespace": false,
+                  "title": "storage_account",
+                  "type": "string",
+                  "useMonospaceFont": false
+                },
+                {
+                  "alignContent": "right",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "number",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "external_read",
+                  "numberFormat": "0",
+                  "order": 11,
+                  "preserveWhitespace": false,
+                  "title": "external_read",
+                  "type": "integer",
+                  "useMonospaceFont": false
+                },
+                {
+                  "alignContent": "right",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "number",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "external_write",
+                  "numberFormat": "0",
+                  "order": 12,
+                  "preserveWhitespace": false,
+                  "title": "external_write",
+                  "type": "integer",
+                  "useMonospaceFont": false
+                },
+                {
+                  "alignContent": "right",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "number",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "uc_read",
+                  "numberFormat": "0",
+                  "order": 13,
+                  "preserveWhitespace": false,
+                  "title": "uc_read",
+                  "type": "integer",
+                  "useMonospaceFont": false
+                },
+                {
+                  "alignContent": "right",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "number",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "uc_write",
+                  "numberFormat": "0",
+                  "order": 14,
+                  "preserveWhitespace": false,
+                  "title": "uc_write",
+                  "type": "integer",
+                  "useMonospaceFont": false
+                }
+              ],
+              "itemsPerPage": 25,
+              "paginationSize": "default",
+              "version": 1,
+              "widgetType": "table",
+              "withRowNumber": false
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 3,
+            "width": 3,
+            "x": 0,
+            "y": 7
+          },
+          "widget": {
+            "name": "0a7c01bb",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "0b4a4101",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "COUNT(DISTINCT `full_namespace`)",
+                      "name": "countdistinct(full_namespace)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "value": {
+                  "displayName": "Count of Unique full_namespace",
+                  "fieldName": "countdistinct(full_namespace)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Count of Distinct Tables"
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 3,
+            "width": 3,
+            "x": 3,
+            "y": 7
+          },
+          "widget": {
+            "name": "74526737",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "37d08591",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "COUNT(DISTINCT `userAgentHeader`)",
+                      "name": "countdistinct(userAgentHeader)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "value": {
+                  "displayName": "Count of Unique userAgentHeader",
+                  "fieldName": "countdistinct(userAgentHeader)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Count of Distinct User Agents"
+              },
+              "version": 2,
+              "widgetType": "counter"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 6,
+            "width": 3,
+            "x": 0,
+            "y": 16
+          },
+          "widget": {
+            "name": "74e76996",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "0b4a4101",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_type`",
+                      "name": "table_type"
+                    },
+                    {
+                      "expression": "COUNT(`full_namespace`)",
+                      "name": "count(full_namespace)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "color": {
+                  "displayName": "Table Type",
+                  "fieldName": "table_type",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "x": {
+                  "displayName": "Table Type",
+                  "fieldName": "table_type",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "displayName": "Count of Tables",
+                  "fieldName": "count(full_namespace)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Total External vs Managed"
+              },
+              "version": 3,
+              "widgetType": "bar"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 6,
+            "width": 3,
+            "x": 3,
+            "y": 16
+          },
+          "widget": {
+            "name": "49d841b5",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "0b4a4101",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`table_type`",
+                      "name": "table_type"
+                    },
+                    {
+                      "expression": "COUNT(`full_namespace`)",
+                      "name": "count(full_namespace)"
+                    },
+                    {
+                      "expression": "`table_catalog`",
+                      "name": "table_catalog"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "color": {
+                  "displayName": "Table Type",
+                  "fieldName": "table_type",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "x": {
+                  "displayName": "Count of Tables",
+                  "fieldName": "count(full_namespace)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "displayName": "Catalog",
+                  "fieldName": "table_catalog",
+                  "scale": {
+                    "sort": {
+                      "by": "x-reversed"
+                    },
+                    "type": "categorical"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Breakdown of Table Types by Catalog"
+              },
+              "version": 3,
+              "widgetType": "bar"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 10,
+            "width": 6,
+            "x": 0,
+            "y": 22
+          },
+          "widget": {
+            "name": "70fec9fa",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "c7a73033",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "`full_namespace`",
+                      "name": "full_namespace"
+                    },
+                    {
+                      "expression": "DATE_TRUNC(\"SECOND\", `storage_time`)",
+                      "name": "secondly(storage_time)"
+                    },
+                    {
+                      "expression": "COUNT(`operationName`)",
+                      "name": "count(operationName)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "encodings": {
+                "color": {
+                  "displayName": "Table Name",
+                  "fieldName": "full_namespace",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "x": {
+                  "displayName": "Time",
+                  "fieldName": "secondly(storage_time)",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "displayName": "Count of Storage Operations",
+                  "fieldName": "count(operationName)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Storage Operations Over TIme by Table"
+              },
+              "version": 3,
+              "widgetType": "line"
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 9,
+            "width": 6,
+            "x": 0,
+            "y": 32
+          },
+          "widget": {
+            "name": "74eca20b",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "37d08591",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`requester`",
+                      "name": "requester"
+                    },
+                    {
+                      "expression": "`subscription_id`",
+                      "name": "subscription_id"
+                    },
+                    {
+                      "expression": "`resource_group`",
+                      "name": "resource_group"
+                    },
+                    {
+                      "expression": "`storage_account`",
+                      "name": "storage_account"
+                    },
+                    {
+                      "expression": "`full_namespace`",
+                      "name": "full_namespace"
+                    },
+                    {
+                      "expression": "`storage_path`",
+                      "name": "storage_path"
+                    },
+                    {
+                      "expression": "`table_type`",
+                      "name": "table_type"
+                    },
+                    {
+                      "expression": "`data_source_format`",
+                      "name": "data_source_format"
+                    },
+                    {
+                      "expression": "`userAgentHeader`",
+                      "name": "userAgentHeader"
+                    },
+                    {
+                      "expression": "`authType`",
+                      "name": "authType"
+                    },
+                    {
+                      "expression": "`authObjectId`",
+                      "name": "authObjectId"
+                    },
+                    {
+                      "expression": "`StorageWrite`",
+                      "name": "StorageWrite"
+                    },
+                    {
+                      "expression": "`StorageDelete`",
+                      "name": "StorageDelete"
+                    },
+                    {
+                      "expression": "`StorageRead`",
+                      "name": "StorageRead"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "allowHTMLByDefault": false,
+              "condensed": true,
+              "encodings": {
+                "columns": [
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "requester",
+                    "fieldName": "requester",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 0,
+                    "preserveWhitespace": false,
+                    "title": "Requester Type",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "subscription_id",
+                    "fieldName": "subscription_id",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 1,
+                    "preserveWhitespace": false,
+                    "title": "Subscription ID",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "resource_group",
+                    "fieldName": "resource_group",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 2,
+                    "preserveWhitespace": false,
+                    "title": "Resource Group",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "storage_account",
+                    "fieldName": "storage_account",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 3,
+                    "preserveWhitespace": false,
+                    "title": "Storage Account",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "full_namespace",
+                    "fieldName": "full_namespace",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 7,
+                    "preserveWhitespace": false,
+                    "title": "Table Name",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "storage_path",
+                    "fieldName": "storage_path",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 8,
+                    "preserveWhitespace": false,
+                    "title": "Storage Path",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "table_type",
+                    "fieldName": "table_type",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 9,
+                    "preserveWhitespace": false,
+                    "title": "Table Type",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "data_source_format",
+                    "fieldName": "data_source_format",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 10,
+                    "preserveWhitespace": false,
+                    "title": "Table Format",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "userAgentHeader",
+                    "fieldName": "userAgentHeader",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 11,
+                    "preserveWhitespace": false,
+                    "title": "User Agent Header",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "authType",
+                    "fieldName": "authType",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 12,
+                    "preserveWhitespace": false,
+                    "title": "Auth Type",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "authObjectId",
+                    "fieldName": "authObjectId",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 13,
+                    "preserveWhitespace": false,
+                    "title": "Auth Object ID",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "right",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "number",
+                    "displayName": "StorageWrite",
+                    "fieldName": "StorageWrite",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "numberFormat": "0",
+                    "order": 14,
+                    "preserveWhitespace": false,
+                    "title": "Storage Write",
+                    "type": "integer",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "right",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "number",
+                    "displayName": "StorageDelete",
+                    "fieldName": "StorageDelete",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "numberFormat": "0",
+                    "order": 15,
+                    "preserveWhitespace": false,
+                    "title": "Storage Delete",
+                    "type": "integer",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "right",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "number",
+                    "displayName": "StorageRead",
+                    "fieldName": "StorageRead",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "numberFormat": "0",
+                    "order": 16,
+                    "preserveWhitespace": false,
+                    "title": "Storage Read",
+                    "type": "integer",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Storage Operations by Requester Type"
+              },
+              "invisibleColumns": [
+                {
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "string",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "table_catalog",
+                  "order": 4,
+                  "preserveWhitespace": false,
+                  "title": "table_catalog",
+                  "type": "string",
+                  "useMonospaceFont": false
+                },
+                {
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "string",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "table_schema",
+                  "order": 5,
+                  "preserveWhitespace": false,
+                  "title": "table_schema",
+                  "type": "string",
+                  "useMonospaceFont": false
+                },
+                {
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "string",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "table_name",
+                  "order": 6,
+                  "preserveWhitespace": false,
+                  "title": "table_name",
+                  "type": "string",
+                  "useMonospaceFont": false
+                }
+              ],
+              "itemsPerPage": 25,
+              "paginationSize": "default",
+              "version": 1,
+              "widgetType": "table",
+              "withRowNumber": false
+            }
+          }
+        },
+        {
+          "position": {
+            "height": 13,
+            "width": 6,
+            "x": 0,
+            "y": 41
+          },
+          "widget": {
+            "name": "71992273",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "0b4a4101",
+                  "disaggregated": true,
+                  "fields": [
+                    {
+                      "expression": "`error`",
+                      "name": "error"
+                    },
+                    {
+                      "expression": "`table_catalog`",
+                      "name": "table_catalog"
+                    },
+                    {
+                      "expression": "`table_schema`",
+                      "name": "table_schema"
+                    },
+                    {
+                      "expression": "`table_name`",
+                      "name": "table_name"
+                    },
+                    {
+                      "expression": "`storage_path`",
+                      "name": "storage_path"
+                    },
+                    {
+                      "expression": "`table_type`",
+                      "name": "table_type"
+                    },
+                    {
+                      "expression": "`data_source_format`",
+                      "name": "data_source_format"
+                    },
+                    {
+                      "expression": "`status`",
+                      "name": "status"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "allowHTMLByDefault": false,
+              "condensed": true,
+              "encodings": {
+                "columns": [
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "error",
+                    "fieldName": "error",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 0,
+                    "preserveWhitespace": false,
+                    "title": "error",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "table_catalog",
+                    "fieldName": "table_catalog",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 1,
+                    "preserveWhitespace": false,
+                    "title": "table_catalog",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "table_schema",
+                    "fieldName": "table_schema",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 2,
+                    "preserveWhitespace": false,
+                    "title": "table_schema",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "table_name",
+                    "fieldName": "table_name",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 3,
+                    "preserveWhitespace": false,
+                    "title": "table_name",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "storage_path",
+                    "fieldName": "storage_path",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 5,
+                    "preserveWhitespace": false,
+                    "title": "storage_path",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "table_type",
+                    "fieldName": "table_type",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 7,
+                    "preserveWhitespace": false,
+                    "title": "table_type",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "data_source_format",
+                    "fieldName": "data_source_format",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 8,
+                    "preserveWhitespace": false,
+                    "title": "data_source_format",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  },
+                  {
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "allowSearch": false,
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "displayAs": "string",
+                    "displayName": "status",
+                    "fieldName": "status",
+                    "highlightLinks": false,
+                    "imageHeight": "",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "linkOpenInNewTab": true,
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "order": 9,
+                    "preserveWhitespace": false,
+                    "title": "status",
+                    "type": "string",
+                    "useMonospaceFont": false,
+                    "visible": true
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "All Table Details"
+              },
+              "invisibleColumns": [
+                {
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "string",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "full_namespace",
+                  "order": 4,
+                  "preserveWhitespace": false,
+                  "title": "full_namespace",
+                  "type": "string",
+                  "useMonospaceFont": false
+                },
+                {
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "allowSearch": false,
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "displayAs": "string",
+                  "highlightLinks": false,
+                  "imageHeight": "",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "linkOpenInNewTab": true,
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "name": "parsed_path",
+                  "order": 6,
+                  "preserveWhitespace": false,
+                  "title": "parsed_path",
+                  "type": "string",
+                  "useMonospaceFont": false
+                }
+              ],
+              "itemsPerPage": 25,
+              "paginationSize": "default",
+              "version": 1,
+              "widgetType": "table",
+              "withRowNumber": false
+            }
+          }
+        }
+      ],
+      "name": "a6a979f3",
+      "pageType": "PAGE_TYPE_UNSPECIFIED"
+    }
+  ]
+}
