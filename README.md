@@ -25,29 +25,16 @@ Cloud Storage Events need to be captured in order to view the distribution of Ma
 
 The rest of the repo assumes that the resources are provisioned.
 
-Storage Logs in Azure will need to be routed to a central location via Diagnostic Settings.  Route them to a Central Event Hub or Storage Account
-
-#### Pipeline Run
-
-Ensure all prerequisites are setup, secret scope and values are correct, and variables are verified.
-
-1. Clone the Repo
-2. Deploy the pipeline using the databricks cli and asset bundles via the command 
-
-```sh
-cd azure && databricks bundle deploy
-```
+Storage Logs in Azure will need to be routed to a central location via Diagnostic Settings.  Route them to a Central Event Hub or Storage Account.
 
 
-3. Navigate to the deployed pipeline, trigger the first run, and wait for successful completion 
+## Deployed Databricks Resources
 
+A Databricks Asset bundle is created for each of the cloud providers above. Use the Databricks CLI to deploy the bundle into a provided target workspace. The 
+bundle will deploy the following assets. 
 
-## Insights
-
-1. Review [Notebook SLOG - Exploration](azure/notebooks/SLOG%20Exploration.ipynb) to determine the distribution of external tables across your accounts.
-2. Review which tables are good candidates for migration.  Tables that are flagged in the notebook are good candidates.  
-
-### Non-UC Paths
-
-1. The exploration notebook has another query that interrogates paths with _delta_log to determine other candidates that may originate from HMS or strictly paths.  
+- `pipeline`: A DLT pipeline to create and manage storage log tables 
+- `dashboard`: A dashboard that leverages the tables created from the DLT pipeline, and system tables. 
+  - External tables are flagged as good candidates to be migrated to a managed tables based on the read and write actions
+  - If an external table is only accessed via a UC access connector, then the table is marked as "Good Candidate for Migration". Otherwise, more investigation is needed before moving the table.
 
