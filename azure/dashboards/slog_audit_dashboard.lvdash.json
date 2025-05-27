@@ -1,49 +1,44 @@
 {
   "datasets": [
     {
-      "displayName": "actions_overtime",
       "name": "c7a73033",
+      "displayName": "actions_overtime",
       "query": "SELECT\n  storage_time,\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  category,\n  operationName,\n  statusText,\n  durationMs,\n  callerIpAddress,\n  authType,\n  authObjectId,\n  userAgentHeader,\n  clientRequestId,\n  objectKey\nFROM slog.default.azure_storage_logs"
     },
     {
-      "displayName": "table_details",
       "name": "0b4a4101",
+      "displayName": "table_details",
       "query": "SELECT \n    table_catalog,\n    table_schema,\n    table_name,\n    full_namespace,\n    storage_path,\n    parsed_path,\n    table_type,\n    data_source_format,\n    status,\n    CASE WHEN status IS NOT NULL THEN 'Failed to Gather Details' ELSE NULL END AS error\nFROM slog.default.all_table_details"
     },
     {
-      "displayName": "actions_counts",
       "name": "37d08591",
-      "query": "SELECT\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  authType,\n  authObjectId,\n  userAgentHeader,\n  CASE\n    WHEN\n      lower(userAgentHeader) like '%databricks%'\n      OR lower(userAgentHeader) like '%dbr%'\n      OR lower(userAgentHeader) like '%apn/1.0 unknown%'\n    THEN\n      'databricks'\n    ELSE 'external'\n  END as requester,\n  SUM(\n    CASE\n      WHEN category = 'StorageWrite' THEN 1\n      ELSE 0\n    END\n  ) AS StorageWrite,\n  SUM(\n    CASE\n      WHEN category = 'StorageDelete' THEN 1\n      ELSE 0\n    END\n  ) AS StorageDelete,\n  SUM(\n    CASE\n      WHEN category = 'StorageRead' THEN 1\n      ELSE 0\n    END\n  ) AS StorageRead\nFROM\n  slog.default.azure_storage_logs\nGROUP BY\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  authType,\n  authObjectId,\n  userAgentHeader,\n  requester"
+      "displayName": "actions_counts",
+      "query": "WITH storage_creds_cte AS (\n  SELECT DISTINCT\n    REGEXP_EXTRACT(credential, 'accessConnectors\\/(.*?)\\,mi_id') as access_credential,\n    id,\n    app_id\n  FROM system.information_schema.storage_credentials\n  LEFT JOIN slog.default.azure_application_details ON REGEXP_EXTRACT(credential, 'accessConnectors\\/(.*?)\\,mi_id') = display_name\n)\nSELECT\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  authType,\n  authObjectId,\n  storage_creds_cte.access_credential,\n  userAgentHeader,\n  CASE WHEN storage_creds_cte.access_credential IS NOT NULL THEN 'databricks' ELSE 'external' END requester,\n  SUM(\n    CASE\n      WHEN category = 'StorageWrite' THEN 1\n      ELSE 0\n    END\n  ) AS StorageWrite,\n  SUM(\n    CASE\n      WHEN category = 'StorageDelete' THEN 1\n      ELSE 0\n    END\n  ) AS StorageDelete,\n  SUM(\n    CASE\n      WHEN category = 'StorageRead' THEN 1\n      ELSE 0\n    END\n  ) AS StorageRead\nFROM\n  slog.default.azure_storage_logs\n  LEFT JOIN storage_creds_cte ON authObjectId = storage_creds_cte.id\nGROUP BY\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  authType,\n  authObjectId,\n  userAgentHeader,\n  requester,\n  storage_creds_cte.access_credential"
     },
     {
-      "displayName": "recommendation",
       "name": "89a92a69",
-      "query": "with cte_details as (\n  SELECT \n    storage_time,\n    subscription_id,\n    resource_group,\n    storage_account,\n    table_catalog,\n    table_schema,\n    table_name,\n    full_namespace,\n    storage_path,\n    table_type,\n    data_source_format,\n    category,\n    operationName,\n    statusText,\n    durationMs,\n    callerIpAddress,\n    authType,\n    authObjectId,\n    userAgentHeader,\n    clientRequestId,\n    objectKey,\n    CASE\n      WHEN\n        lower(userAgentHeader) like '%databricks%'\n        OR lower(userAgentHeader) like '%dbr%'\n        OR lower(userAgentHeader) like '%apn/1.0 unknown%'\n      THEN\n        'databricks'\n      ELSE 'external'\n    END as requester\n  from slog.default.azure_storage_logs\n)\nSELECT\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageRead\"\n        AND requester = 'external'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as external_read,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageWrite\"\n        AND requester = 'external'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as external_write,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageRead\"\n        AND requester = 'databricks'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as uc_read,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageWrite\"\n        AND requester = 'databricks'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as uc_write,\n  CASE\n    WHEN\n      external_read > 0\n      OR external_write > 0\n    THEN\n      'More Investigation Needed'\n    WHEN\n      external_read = 0\n      OR external_write = 0\n    THEN\n      'Good Candidate For Managed Table'\n  END AS recommendation\nFROM\n  cte_details\nGROUP BY\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format"
+      "displayName": "recommendation",
+      "query": "WITH storage_creds_cte AS (\n  SELECT DISTINCT\n    REGEXP_EXTRACT(credential, 'accessConnectors\\/(.*?)\\,mi_id') as access_credential,\n    id,\n    app_id\n  FROM system.information_schema.storage_credentials\n  LEFT JOIN slog.default.azure_application_details ON REGEXP_EXTRACT(credential, 'accessConnectors\\/(.*?)\\,mi_id') = display_name\n),\ncte_details AS (\n  SELECT\n    subscription_id,\n    resource_group,\n    storage_account,\n    table_catalog,\n    table_schema,\n    table_name,\n    full_namespace,\n    storage_path,\n    table_type,\n    data_source_format,\n    authType,\n    authObjectId,\n    storage_creds_cte.access_credential,\n    userAgentHeader,\n    CASE WHEN storage_creds_cte.access_credential IS NOT NULL THEN 'databricks' ELSE 'external' END requester,\n    category\n  FROM\n    slog.default.azure_storage_logs\n    LEFT JOIN storage_creds_cte ON authObjectId = storage_creds_cte.id\n)\nSELECT\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageRead\"\n        AND requester = 'external'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as external_read,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageWrite\"\n        AND requester = 'external'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as external_write,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageRead\"\n        AND requester = 'databricks'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as uc_read,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageWrite\"\n        AND requester = 'databricks'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as uc_write,\n  CASE\n    WHEN\n      external_read > 0\n      OR external_write > 0\n    THEN\n      'More Investigation Needed'\n    WHEN\n      external_read = 0\n      OR external_write = 0\n    THEN\n      'Good Candidate For Managed Table'\n  END AS recommendation\nFROM\n  cte_details\nGROUP BY\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format"
     }
   ],
   "pages": [
     {
+      "name": "a6a979f3",
       "displayName": "main",
       "layout": [
         {
-          "position": {
-            "height": 4,
-            "width": 6,
-            "x": 0,
-            "y": 0
-          },
           "widget": {
             "name": "1fa7d8d8",
             "textbox_spec": "# Table Migration Breakdown\n\nThis dashboard provides a high-level overview of both registered and unregistered tables, as well as how these tables are being accessed. External tables that are exclusively read and updated via Databricks Unity Catalog (UC) are ideal candidates for conversion to 'managed' tables. However, tables with external readers and writers require further investigation before being moved to ensure that other business processes are not disrupted.\n\nTables with the name 'foreign' are one where a specific registered table namespace could not be identified. This can happen due to pipeline authorization issues on a storage account, or the underlying table is only available in the storage account."
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 4
           }
         },
         {
-          "position": {
-            "height": 1,
-            "width": 2,
-            "x": 0,
-            "y": 4
-          },
           "widget": {
             "name": "a51a1f86",
             "queries": [
@@ -51,51 +46,51 @@
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_subscription_id",
                 "query": {
                   "datasetName": "c7a73033",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`subscription_id`",
-                      "name": "subscription_id"
+                      "name": "subscription_id",
+                      "expression": "`subscription_id`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "subscription_id_associativity"
+                      "name": "subscription_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_subscription_id",
                 "query": {
                   "datasetName": "37d08591",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`subscription_id`",
-                      "name": "subscription_id"
+                      "name": "subscription_id",
+                      "expression": "`subscription_id`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "subscription_id_associativity"
+                      "name": "subscription_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_subscription_id",
                 "query": {
                   "datasetName": "89a92a69",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`subscription_id`",
-                      "name": "subscription_id"
+                      "name": "subscription_id",
+                      "expression": "`subscription_id`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "subscription_id_associativity"
+                      "name": "subscription_id_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -126,15 +121,15 @@
               "version": 2,
               "widgetType": "filter-multi-select"
             }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 2,
+            "height": 1
           }
         },
         {
-          "position": {
-            "height": 1,
-            "width": 2,
-            "x": 2,
-            "y": 4
-          },
           "widget": {
             "name": "cefb13d1",
             "queries": [
@@ -142,51 +137,51 @@
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_resource_group",
                 "query": {
                   "datasetName": "c7a73033",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`resource_group`",
-                      "name": "resource_group"
+                      "name": "resource_group",
+                      "expression": "`resource_group`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "resource_group_associativity"
+                      "name": "resource_group_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_resource_group",
                 "query": {
                   "datasetName": "37d08591",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`resource_group`",
-                      "name": "resource_group"
+                      "name": "resource_group",
+                      "expression": "`resource_group`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "resource_group_associativity"
+                      "name": "resource_group_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_resource_group",
                 "query": {
                   "datasetName": "89a92a69",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`resource_group`",
-                      "name": "resource_group"
+                      "name": "resource_group",
+                      "expression": "`resource_group`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "resource_group_associativity"
+                      "name": "resource_group_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -217,15 +212,15 @@
               "version": 2,
               "widgetType": "filter-multi-select"
             }
+          },
+          "position": {
+            "x": 2,
+            "y": 4,
+            "width": 2,
+            "height": 1
           }
         },
         {
-          "position": {
-            "height": 1,
-            "width": 2,
-            "x": 4,
-            "y": 4
-          },
           "widget": {
             "name": "2d4e920d",
             "queries": [
@@ -233,51 +228,51 @@
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_storage_account",
                 "query": {
                   "datasetName": "c7a73033",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`storage_account`",
-                      "name": "storage_account"
+                      "name": "storage_account",
+                      "expression": "`storage_account`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "storage_account_associativity"
+                      "name": "storage_account_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_storage_account",
                 "query": {
                   "datasetName": "37d08591",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`storage_account`",
-                      "name": "storage_account"
+                      "name": "storage_account",
+                      "expression": "`storage_account`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "storage_account_associativity"
+                      "name": "storage_account_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_storage_account",
                 "query": {
                   "datasetName": "89a92a69",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`storage_account`",
-                      "name": "storage_account"
+                      "name": "storage_account",
+                      "expression": "`storage_account`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "storage_account_associativity"
+                      "name": "storage_account_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -308,15 +303,15 @@
               "version": 2,
               "widgetType": "filter-multi-select"
             }
+          },
+          "position": {
+            "x": 4,
+            "y": 4,
+            "width": 2,
+            "height": 1
           }
         },
         {
-          "position": {
-            "height": 1,
-            "width": 2,
-            "x": 0,
-            "y": 5
-          },
           "widget": {
             "name": "a0efee5a",
             "queries": [
@@ -324,68 +319,68 @@
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_table_catalog",
                 "query": {
                   "datasetName": "c7a73033",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_catalog`",
-                      "name": "table_catalog"
+                      "name": "table_catalog",
+                      "expression": "`table_catalog`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_catalog_associativity"
+                      "name": "table_catalog_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_table_catalog",
                 "query": {
                   "datasetName": "0b4a4101",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_catalog`",
-                      "name": "table_catalog"
+                      "name": "table_catalog",
+                      "expression": "`table_catalog`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_catalog_associativity"
+                      "name": "table_catalog_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_table_catalog",
                 "query": {
                   "datasetName": "89a92a69",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_catalog`",
-                      "name": "table_catalog"
+                      "name": "table_catalog",
+                      "expression": "`table_catalog`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_catalog_associativity"
+                      "name": "table_catalog_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_table_catalog",
                 "query": {
                   "datasetName": "37d08591",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_catalog`",
-                      "name": "table_catalog"
+                      "name": "table_catalog",
+                      "expression": "`table_catalog`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_catalog_associativity"
+                      "name": "table_catalog_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -422,15 +417,15 @@
               "version": 2,
               "widgetType": "filter-multi-select"
             }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 2,
+            "height": 1
           }
         },
         {
-          "position": {
-            "height": 1,
-            "width": 2,
-            "x": 2,
-            "y": 5
-          },
           "widget": {
             "name": "e2dd8562",
             "queries": [
@@ -438,68 +433,68 @@
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_table_schema",
                 "query": {
                   "datasetName": "c7a73033",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_schema`",
-                      "name": "table_schema"
+                      "name": "table_schema",
+                      "expression": "`table_schema`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_schema_associativity"
+                      "name": "table_schema_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_table_schema",
                 "query": {
                   "datasetName": "0b4a4101",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_schema`",
-                      "name": "table_schema"
+                      "name": "table_schema",
+                      "expression": "`table_schema`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_schema_associativity"
+                      "name": "table_schema_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_table_schema",
                 "query": {
                   "datasetName": "37d08591",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_schema`",
-                      "name": "table_schema"
+                      "name": "table_schema",
+                      "expression": "`table_schema`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_schema_associativity"
+                      "name": "table_schema_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_table_schema",
                 "query": {
                   "datasetName": "89a92a69",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_schema`",
-                      "name": "table_schema"
+                      "name": "table_schema",
+                      "expression": "`table_schema`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_schema_associativity"
+                      "name": "table_schema_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -535,15 +530,15 @@
               "version": 2,
               "widgetType": "filter-multi-select"
             }
+          },
+          "position": {
+            "x": 2,
+            "y": 5,
+            "width": 2,
+            "height": 1
           }
         },
         {
-          "position": {
-            "height": 1,
-            "width": 2,
-            "x": 4,
-            "y": 5
-          },
           "widget": {
             "name": "d88813d1",
             "queries": [
@@ -551,68 +546,68 @@
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_table_name",
                 "query": {
                   "datasetName": "c7a73033",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_name`",
-                      "name": "table_name"
+                      "name": "table_name",
+                      "expression": "`table_name`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_name_associativity"
+                      "name": "table_name_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_table_name",
                 "query": {
                   "datasetName": "0b4a4101",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_name`",
-                      "name": "table_name"
+                      "name": "table_name",
+                      "expression": "`table_name`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_name_associativity"
+                      "name": "table_name_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_table_name",
                 "query": {
                   "datasetName": "37d08591",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_name`",
-                      "name": "table_name"
+                      "name": "table_name",
+                      "expression": "`table_name`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_name_associativity"
+                      "name": "table_name_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_table_name",
                 "query": {
                   "datasetName": "89a92a69",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_name`",
-                      "name": "table_name"
+                      "name": "table_name",
+                      "expression": "`table_name`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_name_associativity"
+                      "name": "table_name_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -648,15 +643,15 @@
               "version": 2,
               "widgetType": "filter-multi-select"
             }
+          },
+          "position": {
+            "x": 4,
+            "y": 5,
+            "width": 2,
+            "height": 1
           }
         },
         {
-          "position": {
-            "height": 1,
-            "width": 2,
-            "x": 0,
-            "y": 6
-          },
           "widget": {
             "name": "0995313b",
             "queries": [
@@ -664,68 +659,68 @@
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_table_type",
                 "query": {
                   "datasetName": "c7a73033",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_type`",
-                      "name": "table_type"
+                      "name": "table_type",
+                      "expression": "`table_type`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_type_associativity"
+                      "name": "table_type_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_table_type",
                 "query": {
                   "datasetName": "0b4a4101",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_type`",
-                      "name": "table_type"
+                      "name": "table_type",
+                      "expression": "`table_type`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_type_associativity"
+                      "name": "table_type_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_table_type",
                 "query": {
                   "datasetName": "37d08591",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_type`",
-                      "name": "table_type"
+                      "name": "table_type",
+                      "expression": "`table_type`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_type_associativity"
+                      "name": "table_type_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_table_type",
                 "query": {
                   "datasetName": "89a92a69",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_type`",
-                      "name": "table_type"
+                      "name": "table_type",
+                      "expression": "`table_type`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "table_type_associativity"
+                      "name": "table_type_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -761,15 +756,15 @@
               "version": 2,
               "widgetType": "filter-multi-select"
             }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 2,
+            "height": 1
           }
         },
         {
-          "position": {
-            "height": 1,
-            "width": 2,
-            "x": 2,
-            "y": 6
-          },
           "widget": {
             "name": "fc1de645",
             "queries": [
@@ -777,68 +772,68 @@
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_data_source_format",
                 "query": {
                   "datasetName": "c7a73033",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`data_source_format`",
-                      "name": "data_source_format"
+                      "name": "data_source_format",
+                      "expression": "`data_source_format`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "data_source_format_associativity"
+                      "name": "data_source_format_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f59040413f7a617b29ca8a9cf33_data_source_format",
                 "query": {
                   "datasetName": "0b4a4101",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`data_source_format`",
-                      "name": "data_source_format"
+                      "name": "data_source_format",
+                      "expression": "`data_source_format`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "data_source_format_associativity"
+                      "name": "data_source_format_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_data_source_format",
                 "query": {
                   "datasetName": "37d08591",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`data_source_format`",
-                      "name": "data_source_format"
+                      "name": "data_source_format",
+                      "expression": "`data_source_format`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "data_source_format_associativity"
+                      "name": "data_source_format_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f0300661921492b9520e19509900e4_data_source_format",
                 "query": {
                   "datasetName": "89a92a69",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`data_source_format`",
-                      "name": "data_source_format"
+                      "name": "data_source_format",
+                      "expression": "`data_source_format`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "data_source_format_associativity"
+                      "name": "data_source_format_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -874,15 +869,15 @@
               "version": 2,
               "widgetType": "filter-multi-select"
             }
+          },
+          "position": {
+            "x": 2,
+            "y": 6,
+            "width": 2,
+            "height": 1
           }
         },
         {
-          "position": {
-            "height": 1,
-            "width": 2,
-            "x": 4,
-            "y": 6
-          },
           "widget": {
             "name": "aec590bc",
             "queries": [
@@ -890,34 +885,34 @@
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_userAgentHeader",
                 "query": {
                   "datasetName": "c7a73033",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`userAgentHeader`",
-                      "name": "userAgentHeader"
+                      "name": "userAgentHeader",
+                      "expression": "`userAgentHeader`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "userAgentHeader_associativity"
+                      "name": "userAgentHeader_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               },
               {
                 "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_userAgentHeader",
                 "query": {
                   "datasetName": "37d08591",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`userAgentHeader`",
-                      "name": "userAgentHeader"
+                      "name": "userAgentHeader",
+                      "expression": "`userAgentHeader`"
                     },
                     {
-                      "expression": "COUNT_IF(`associative_filter_predicate_group`)",
-                      "name": "userAgentHeader_associativity"
+                      "name": "userAgentHeader_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -943,15 +938,15 @@
               "version": 2,
               "widgetType": "filter-multi-select"
             }
+          },
+          "position": {
+            "x": 4,
+            "y": 6,
+            "width": 2,
+            "height": 1
           }
         },
         {
-          "position": {
-            "height": 6,
-            "width": 6,
-            "x": 0,
-            "y": 10
-          },
           "widget": {
             "name": "2b854f12",
             "queries": [
@@ -959,29 +954,29 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "89a92a69",
-                  "disaggregated": true,
                   "fields": [
                     {
-                      "expression": "`recommendation`",
-                      "name": "recommendation"
+                      "name": "recommendation",
+                      "expression": "`recommendation`"
                     },
                     {
-                      "expression": "`full_namespace`",
-                      "name": "full_namespace"
+                      "name": "full_namespace",
+                      "expression": "`full_namespace`"
                     },
                     {
-                      "expression": "`storage_path`",
-                      "name": "storage_path"
+                      "name": "storage_path",
+                      "expression": "`storage_path`"
                     },
                     {
-                      "expression": "`table_type`",
-                      "name": "table_type"
+                      "name": "table_type",
+                      "expression": "`table_type`"
                     },
                     {
-                      "expression": "`data_source_format`",
-                      "name": "data_source_format"
+                      "name": "data_source_format",
+                      "expression": "`data_source_format`"
                     }
-                  ]
+                  ],
+                  "disaggregated": true
                 }
               }
             ],
@@ -1393,15 +1388,15 @@
               "widgetType": "table",
               "withRowNumber": false
             }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 6,
+            "height": 6
           }
         },
         {
-          "position": {
-            "height": 3,
-            "width": 3,
-            "x": 0,
-            "y": 7
-          },
           "widget": {
             "name": "0a7c01bb",
             "queries": [
@@ -1409,13 +1404,13 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "0b4a4101",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "COUNT(DISTINCT `full_namespace`)",
-                      "name": "countdistinct(full_namespace)"
+                      "name": "countdistinct(full_namespace)",
+                      "expression": "COUNT(DISTINCT `full_namespace`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -1433,15 +1428,15 @@
               "version": 2,
               "widgetType": "counter"
             }
+          },
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 3,
+            "height": 3
           }
         },
         {
-          "position": {
-            "height": 3,
-            "width": 3,
-            "x": 3,
-            "y": 7
-          },
           "widget": {
             "name": "74526737",
             "queries": [
@@ -1449,13 +1444,13 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "37d08591",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "COUNT(DISTINCT `userAgentHeader`)",
-                      "name": "countdistinct(userAgentHeader)"
+                      "name": "countdistinct(userAgentHeader)",
+                      "expression": "COUNT(DISTINCT `userAgentHeader`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -1473,15 +1468,15 @@
               "version": 2,
               "widgetType": "counter"
             }
+          },
+          "position": {
+            "x": 3,
+            "y": 7,
+            "width": 3,
+            "height": 3
           }
         },
         {
-          "position": {
-            "height": 6,
-            "width": 3,
-            "x": 0,
-            "y": 16
-          },
           "widget": {
             "name": "74e76996",
             "queries": [
@@ -1489,17 +1484,17 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "0b4a4101",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_type`",
-                      "name": "table_type"
+                      "name": "table_type",
+                      "expression": "`table_type`"
                     },
                     {
-                      "expression": "COUNT(`full_namespace`)",
-                      "name": "count(full_namespace)"
+                      "name": "count(full_namespace)",
+                      "expression": "COUNT(`full_namespace`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -1534,15 +1529,15 @@
               "version": 3,
               "widgetType": "bar"
             }
+          },
+          "position": {
+            "x": 0,
+            "y": 16,
+            "width": 3,
+            "height": 6
           }
         },
         {
-          "position": {
-            "height": 6,
-            "width": 3,
-            "x": 3,
-            "y": 16
-          },
           "widget": {
             "name": "49d841b5",
             "queries": [
@@ -1550,21 +1545,21 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "0b4a4101",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`table_type`",
-                      "name": "table_type"
+                      "name": "table_type",
+                      "expression": "`table_type`"
                     },
                     {
-                      "expression": "COUNT(`full_namespace`)",
-                      "name": "count(full_namespace)"
+                      "name": "count(full_namespace)",
+                      "expression": "COUNT(`full_namespace`)"
                     },
                     {
-                      "expression": "`table_catalog`",
-                      "name": "table_catalog"
+                      "name": "table_catalog",
+                      "expression": "`table_catalog`"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -1602,15 +1597,15 @@
               "version": 3,
               "widgetType": "bar"
             }
+          },
+          "position": {
+            "x": 3,
+            "y": 16,
+            "width": 3,
+            "height": 6
           }
         },
         {
-          "position": {
-            "height": 10,
-            "width": 6,
-            "x": 0,
-            "y": 22
-          },
           "widget": {
             "name": "70fec9fa",
             "queries": [
@@ -1618,21 +1613,21 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "c7a73033",
-                  "disaggregated": false,
                   "fields": [
                     {
-                      "expression": "`full_namespace`",
-                      "name": "full_namespace"
+                      "name": "full_namespace",
+                      "expression": "`full_namespace`"
                     },
                     {
-                      "expression": "DATE_TRUNC(\"SECOND\", `storage_time`)",
-                      "name": "secondly(storage_time)"
+                      "name": "secondly(storage_time)",
+                      "expression": "DATE_TRUNC(\"SECOND\", `storage_time`)"
                     },
                     {
-                      "expression": "COUNT(`operationName`)",
-                      "name": "count(operationName)"
+                      "name": "count(operationName)",
+                      "expression": "COUNT(`operationName`)"
                     }
-                  ]
+                  ],
+                  "disaggregated": false
                 }
               }
             ],
@@ -1667,15 +1662,15 @@
               "version": 3,
               "widgetType": "line"
             }
+          },
+          "position": {
+            "x": 0,
+            "y": 22,
+            "width": 6,
+            "height": 10
           }
         },
         {
-          "position": {
-            "height": 9,
-            "width": 6,
-            "x": 0,
-            "y": 32
-          },
           "widget": {
             "name": "74eca20b",
             "queries": [
@@ -1683,552 +1678,583 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "37d08591",
-                  "disaggregated": true,
                   "fields": [
                     {
-                      "expression": "`requester`",
-                      "name": "requester"
+                      "name": "requester",
+                      "expression": "`requester`"
                     },
                     {
-                      "expression": "`subscription_id`",
-                      "name": "subscription_id"
+                      "name": "subscription_id",
+                      "expression": "`subscription_id`"
                     },
                     {
-                      "expression": "`resource_group`",
-                      "name": "resource_group"
+                      "name": "resource_group",
+                      "expression": "`resource_group`"
                     },
                     {
-                      "expression": "`storage_account`",
-                      "name": "storage_account"
+                      "name": "storage_account",
+                      "expression": "`storage_account`"
                     },
                     {
-                      "expression": "`full_namespace`",
-                      "name": "full_namespace"
+                      "name": "full_namespace",
+                      "expression": "`full_namespace`"
                     },
                     {
-                      "expression": "`storage_path`",
-                      "name": "storage_path"
+                      "name": "storage_path",
+                      "expression": "`storage_path`"
                     },
                     {
-                      "expression": "`table_type`",
-                      "name": "table_type"
+                      "name": "table_type",
+                      "expression": "`table_type`"
                     },
                     {
-                      "expression": "`data_source_format`",
-                      "name": "data_source_format"
+                      "name": "data_source_format",
+                      "expression": "`data_source_format`"
                     },
                     {
-                      "expression": "`userAgentHeader`",
-                      "name": "userAgentHeader"
+                      "name": "userAgentHeader",
+                      "expression": "`userAgentHeader`"
                     },
                     {
-                      "expression": "`authType`",
-                      "name": "authType"
+                      "name": "authType",
+                      "expression": "`authType`"
                     },
                     {
-                      "expression": "`authObjectId`",
-                      "name": "authObjectId"
+                      "name": "authObjectId",
+                      "expression": "`authObjectId`"
                     },
                     {
-                      "expression": "`StorageWrite`",
-                      "name": "StorageWrite"
+                      "name": "access_credential",
+                      "expression": "`access_credential`"
                     },
                     {
-                      "expression": "`StorageDelete`",
-                      "name": "StorageDelete"
+                      "name": "StorageWrite",
+                      "expression": "`StorageWrite`"
                     },
                     {
-                      "expression": "`StorageRead`",
-                      "name": "StorageRead"
+                      "name": "StorageDelete",
+                      "expression": "`StorageDelete`"
+                    },
+                    {
+                      "name": "StorageRead",
+                      "expression": "`StorageRead`"
                     }
-                  ]
+                  ],
+                  "disaggregated": true
                 }
               }
             ],
             "spec": {
-              "allowHTMLByDefault": false,
-              "condensed": true,
+              "version": 1,
+              "widgetType": "table",
               "encodings": {
                 "columns": [
                   {
-                    "alignContent": "left",
-                    "allowHTML": false,
-                    "allowSearch": false,
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "displayAs": "string",
-                    "displayName": "requester",
                     "fieldName": "requester",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
                     "order": 0,
-                    "preserveWhitespace": false,
                     "title": "Requester Type",
-                    "type": "string",
-                    "useMonospaceFont": false,
-                    "visible": true
-                  },
-                  {
+                    "allowSearch": false,
                     "alignContent": "left",
                     "allowHTML": false,
-                    "allowSearch": false,
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "displayAs": "string",
-                    "displayName": "subscription_id",
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "requester"
+                  },
+                  {
                     "fieldName": "subscription_id",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
                     "order": 1,
-                    "preserveWhitespace": false,
                     "title": "Subscription ID",
-                    "type": "string",
-                    "useMonospaceFont": false,
-                    "visible": true
-                  },
-                  {
+                    "allowSearch": false,
                     "alignContent": "left",
                     "allowHTML": false,
-                    "allowSearch": false,
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "displayAs": "string",
-                    "displayName": "resource_group",
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "subscription_id"
+                  },
+                  {
                     "fieldName": "resource_group",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
                     "order": 2,
-                    "preserveWhitespace": false,
                     "title": "Resource Group",
-                    "type": "string",
-                    "useMonospaceFont": false,
-                    "visible": true
-                  },
-                  {
+                    "allowSearch": false,
                     "alignContent": "left",
                     "allowHTML": false,
-                    "allowSearch": false,
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "displayAs": "string",
-                    "displayName": "storage_account",
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "resource_group"
+                  },
+                  {
                     "fieldName": "storage_account",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
                     "order": 3,
-                    "preserveWhitespace": false,
                     "title": "Storage Account",
-                    "type": "string",
-                    "useMonospaceFont": false,
-                    "visible": true
-                  },
-                  {
+                    "allowSearch": false,
                     "alignContent": "left",
                     "allowHTML": false,
-                    "allowSearch": false,
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "displayAs": "string",
-                    "displayName": "full_namespace",
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "storage_account"
+                  },
+                  {
                     "fieldName": "full_namespace",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
                     "order": 7,
-                    "preserveWhitespace": false,
                     "title": "Table Name",
-                    "type": "string",
-                    "useMonospaceFont": false,
-                    "visible": true
-                  },
-                  {
+                    "allowSearch": false,
                     "alignContent": "left",
                     "allowHTML": false,
-                    "allowSearch": false,
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "displayAs": "string",
-                    "displayName": "storage_path",
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "full_namespace"
+                  },
+                  {
                     "fieldName": "storage_path",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
                     "order": 8,
-                    "preserveWhitespace": false,
                     "title": "Storage Path",
-                    "type": "string",
-                    "useMonospaceFont": false,
-                    "visible": true
-                  },
-                  {
+                    "allowSearch": false,
                     "alignContent": "left",
                     "allowHTML": false,
-                    "allowSearch": false,
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "displayAs": "string",
-                    "displayName": "table_type",
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "storage_path"
+                  },
+                  {
                     "fieldName": "table_type",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
                     "order": 9,
-                    "preserveWhitespace": false,
                     "title": "Table Type",
-                    "type": "string",
-                    "useMonospaceFont": false,
-                    "visible": true
-                  },
-                  {
+                    "allowSearch": false,
                     "alignContent": "left",
                     "allowHTML": false,
-                    "allowSearch": false,
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "displayAs": "string",
-                    "displayName": "data_source_format",
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "table_type"
+                  },
+                  {
                     "fieldName": "data_source_format",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
                     "order": 10,
-                    "preserveWhitespace": false,
                     "title": "Table Format",
-                    "type": "string",
-                    "useMonospaceFont": false,
-                    "visible": true
-                  },
-                  {
+                    "allowSearch": false,
                     "alignContent": "left",
                     "allowHTML": false,
-                    "allowSearch": false,
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "displayAs": "string",
-                    "displayName": "userAgentHeader",
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "data_source_format"
+                  },
+                  {
                     "fieldName": "userAgentHeader",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
                     "order": 11,
-                    "preserveWhitespace": false,
                     "title": "User Agent Header",
-                    "type": "string",
-                    "useMonospaceFont": false,
-                    "visible": true
-                  },
-                  {
+                    "allowSearch": false,
                     "alignContent": "left",
                     "allowHTML": false,
-                    "allowSearch": false,
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "displayAs": "string",
-                    "displayName": "authType",
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "userAgentHeader"
+                  },
+                  {
                     "fieldName": "authType",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "order": 12,
-                    "preserveWhitespace": false,
-                    "title": "Auth Type",
+                    "linkOpenInNewTab": true,
                     "type": "string",
-                    "useMonospaceFont": false,
-                    "visible": true
-                  },
-                  {
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 12,
+                    "title": "Auth Type",
+                    "allowSearch": false,
                     "alignContent": "left",
                     "allowHTML": false,
-                    "allowSearch": false,
-                    "booleanValues": [
-                      "false",
-                      "true"
-                    ],
-                    "displayAs": "string",
-                    "displayName": "authObjectId",
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "authType"
+                  },
+                  {
                     "fieldName": "authObjectId",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "order": 13,
-                    "preserveWhitespace": false,
-                    "title": "Auth Object ID",
+                    "linkOpenInNewTab": true,
                     "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 13,
+                    "title": "Auth Object ID",
+                    "allowSearch": false,
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "highlightLinks": false,
                     "useMonospaceFont": false,
-                    "visible": true
+                    "preserveWhitespace": false,
+                    "displayName": "authObjectId"
                   },
                   {
-                    "alignContent": "right",
-                    "allowHTML": false,
-                    "allowSearch": false,
+                    "fieldName": "access_credential",
                     "booleanValues": [
                       "false",
                       "true"
                     ],
-                    "displayAs": "number",
-                    "displayName": "StorageWrite",
-                    "fieldName": "StorageWrite",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "numberFormat": "0",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
                     "order": 14,
-                    "preserveWhitespace": false,
-                    "title": "Storage Write",
-                    "type": "integer",
+                    "title": "UC Access Credential",
+                    "allowSearch": false,
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "highlightLinks": false,
                     "useMonospaceFont": false,
-                    "visible": true
+                    "preserveWhitespace": false,
+                    "displayName": "access_credential"
                   },
                   {
-                    "alignContent": "right",
-                    "allowHTML": false,
-                    "allowSearch": false,
+                    "fieldName": "StorageWrite",
+                    "numberFormat": "0",
                     "booleanValues": [
                       "false",
                       "true"
                     ],
-                    "displayAs": "number",
-                    "displayName": "StorageDelete",
-                    "fieldName": "StorageDelete",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "numberFormat": "0",
+                    "linkOpenInNewTab": true,
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
                     "order": 15,
-                    "preserveWhitespace": false,
-                    "title": "Storage Delete",
-                    "type": "integer",
-                    "useMonospaceFont": false,
-                    "visible": true
-                  },
-                  {
+                    "title": "Storage Write",
+                    "allowSearch": false,
                     "alignContent": "right",
                     "allowHTML": false,
-                    "allowSearch": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "StorageWrite"
+                  },
+                  {
+                    "fieldName": "StorageDelete",
+                    "numberFormat": "0",
                     "booleanValues": [
                       "false",
                       "true"
                     ],
-                    "displayAs": "number",
-                    "displayName": "StorageRead",
-                    "fieldName": "StorageRead",
-                    "highlightLinks": false,
-                    "imageHeight": "",
-                    "imageTitleTemplate": "{{ @ }}",
                     "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
                     "imageWidth": "",
-                    "linkOpenInNewTab": true,
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
                     "linkTextTemplate": "{{ @ }}",
                     "linkTitleTemplate": "{{ @ }}",
-                    "linkUrlTemplate": "{{ @ }}",
-                    "numberFormat": "0",
-                    "order": 16,
-                    "preserveWhitespace": false,
-                    "title": "Storage Read",
+                    "linkOpenInNewTab": true,
                     "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 16,
+                    "title": "Storage Delete",
+                    "allowSearch": false,
+                    "alignContent": "right",
+                    "allowHTML": false,
+                    "highlightLinks": false,
                     "useMonospaceFont": false,
-                    "visible": true
+                    "preserveWhitespace": false,
+                    "displayName": "StorageDelete"
+                  },
+                  {
+                    "fieldName": "StorageRead",
+                    "numberFormat": "0",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 17,
+                    "title": "Storage Read",
+                    "allowSearch": false,
+                    "alignContent": "right",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "StorageRead"
                   }
                 ]
               },
+              "invisibleColumns": [
+                {
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "imageHeight": "",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkOpenInNewTab": true,
+                  "name": "table_catalog",
+                  "type": "string",
+                  "displayAs": "string",
+                  "order": 4,
+                  "title": "table_catalog",
+                  "allowSearch": false,
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "highlightLinks": false,
+                  "useMonospaceFont": false,
+                  "preserveWhitespace": false
+                },
+                {
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "imageHeight": "",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkOpenInNewTab": true,
+                  "name": "table_schema",
+                  "type": "string",
+                  "displayAs": "string",
+                  "order": 5,
+                  "title": "table_schema",
+                  "allowSearch": false,
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "highlightLinks": false,
+                  "useMonospaceFont": false,
+                  "preserveWhitespace": false
+                },
+                {
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "imageHeight": "",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkOpenInNewTab": true,
+                  "name": "table_name",
+                  "type": "string",
+                  "displayAs": "string",
+                  "order": 6,
+                  "title": "table_name",
+                  "allowSearch": false,
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "highlightLinks": false,
+                  "useMonospaceFont": false,
+                  "preserveWhitespace": false
+                }
+              ],
+              "allowHTMLByDefault": false,
+              "itemsPerPage": 25,
+              "paginationSize": "default",
+              "condensed": true,
+              "withRowNumber": false,
               "frame": {
                 "showTitle": true,
                 "title": "Storage Operations by Requester Type"
-              },
-              "invisibleColumns": [
-                {
-                  "alignContent": "left",
-                  "allowHTML": false,
-                  "allowSearch": false,
-                  "booleanValues": [
-                    "false",
-                    "true"
-                  ],
-                  "displayAs": "string",
-                  "highlightLinks": false,
-                  "imageHeight": "",
-                  "imageTitleTemplate": "{{ @ }}",
-                  "imageUrlTemplate": "{{ @ }}",
-                  "imageWidth": "",
-                  "linkOpenInNewTab": true,
-                  "linkTextTemplate": "{{ @ }}",
-                  "linkTitleTemplate": "{{ @ }}",
-                  "linkUrlTemplate": "{{ @ }}",
-                  "name": "table_catalog",
-                  "order": 4,
-                  "preserveWhitespace": false,
-                  "title": "table_catalog",
-                  "type": "string",
-                  "useMonospaceFont": false
-                },
-                {
-                  "alignContent": "left",
-                  "allowHTML": false,
-                  "allowSearch": false,
-                  "booleanValues": [
-                    "false",
-                    "true"
-                  ],
-                  "displayAs": "string",
-                  "highlightLinks": false,
-                  "imageHeight": "",
-                  "imageTitleTemplate": "{{ @ }}",
-                  "imageUrlTemplate": "{{ @ }}",
-                  "imageWidth": "",
-                  "linkOpenInNewTab": true,
-                  "linkTextTemplate": "{{ @ }}",
-                  "linkTitleTemplate": "{{ @ }}",
-                  "linkUrlTemplate": "{{ @ }}",
-                  "name": "table_schema",
-                  "order": 5,
-                  "preserveWhitespace": false,
-                  "title": "table_schema",
-                  "type": "string",
-                  "useMonospaceFont": false
-                },
-                {
-                  "alignContent": "left",
-                  "allowHTML": false,
-                  "allowSearch": false,
-                  "booleanValues": [
-                    "false",
-                    "true"
-                  ],
-                  "displayAs": "string",
-                  "highlightLinks": false,
-                  "imageHeight": "",
-                  "imageTitleTemplate": "{{ @ }}",
-                  "imageUrlTemplate": "{{ @ }}",
-                  "imageWidth": "",
-                  "linkOpenInNewTab": true,
-                  "linkTextTemplate": "{{ @ }}",
-                  "linkTitleTemplate": "{{ @ }}",
-                  "linkUrlTemplate": "{{ @ }}",
-                  "name": "table_name",
-                  "order": 6,
-                  "preserveWhitespace": false,
-                  "title": "table_name",
-                  "type": "string",
-                  "useMonospaceFont": false
-                }
-              ],
-              "itemsPerPage": 25,
-              "paginationSize": "default",
-              "version": 1,
-              "widgetType": "table",
-              "withRowNumber": false
+              }
             }
+          },
+          "position": {
+            "x": 0,
+            "y": 32,
+            "width": 6,
+            "height": 9
           }
         },
         {
-          "position": {
-            "height": 13,
-            "width": 6,
-            "x": 0,
-            "y": 41
-          },
           "widget": {
             "name": "71992273",
             "queries": [
@@ -2236,41 +2262,41 @@
                 "name": "main_query",
                 "query": {
                   "datasetName": "0b4a4101",
-                  "disaggregated": true,
                   "fields": [
                     {
-                      "expression": "`error`",
-                      "name": "error"
+                      "name": "error",
+                      "expression": "`error`"
                     },
                     {
-                      "expression": "`table_catalog`",
-                      "name": "table_catalog"
+                      "name": "table_catalog",
+                      "expression": "`table_catalog`"
                     },
                     {
-                      "expression": "`table_schema`",
-                      "name": "table_schema"
+                      "name": "table_schema",
+                      "expression": "`table_schema`"
                     },
                     {
-                      "expression": "`table_name`",
-                      "name": "table_name"
+                      "name": "table_name",
+                      "expression": "`table_name`"
                     },
                     {
-                      "expression": "`storage_path`",
-                      "name": "storage_path"
+                      "name": "storage_path",
+                      "expression": "`storage_path`"
                     },
                     {
-                      "expression": "`table_type`",
-                      "name": "table_type"
+                      "name": "table_type",
+                      "expression": "`table_type`"
                     },
                     {
-                      "expression": "`data_source_format`",
-                      "name": "data_source_format"
+                      "name": "data_source_format",
+                      "expression": "`data_source_format`"
                     },
                     {
-                      "expression": "`status`",
-                      "name": "status"
+                      "name": "status",
+                      "expression": "`status`"
                     }
-                  ]
+                  ],
+                  "disaggregated": true
                 }
               }
             ],
@@ -2559,11 +2585,17 @@
               "widgetType": "table",
               "withRowNumber": false
             }
+          },
+          "position": {
+            "x": 0,
+            "y": 41,
+            "width": 6,
+            "height": 13
           }
         }
       ],
-      "name": "a6a979f3",
-      "pageType": "PAGE_TYPE_UNSPECIFIED"
+      "pageType": "PAGE_TYPE_CANVAS"
     }
   ]
 }
+

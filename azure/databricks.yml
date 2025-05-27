@@ -14,10 +14,11 @@ variables:
       bundle.sourcePath: ${workspace.file_path}
       secret-scope: slog-scope
       eh-name: slog
-      eh-namespace: eh-namespace
-      eh-slogs-client-id: eh-slogs-client-id
-      eh-slogs-client-secret: eh-slogs-client-secret
-      eh-slogs-tenant-id: eh-slogs-tenant-id
+      eh-namespace: <event hub namespace>
+      tenant-id:  < tenant id >
+      client-id: < client id >
+      client-secret: < client secret >
+      get-azure-apps: True
 
 include:
   - resources/*.yml
