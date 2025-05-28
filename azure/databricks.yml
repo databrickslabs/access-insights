@@ -15,10 +15,9 @@ variables:
       secret-scope: slog-scope
       eh-name: slog
       eh-namespace: <event hub namespace>
-      tenant-id:  < tenant id >
       client-id: < client id >
       client-secret: < client secret >
-      get-azure-apps: True
+      tenant-id: < tenant id >
 
 include:
   - resources/*.yml

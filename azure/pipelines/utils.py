@@ -51,6 +51,7 @@ def azure_apps(
     tenant_id: str,
     client_id: str,
     client_secret: str,
+    app_names: str | list[str],
     schema: StructType | str,
 ) -> DataFrame:
     """
@@ -61,13 +62,17 @@ def azure_apps(
         tenant_id: Azure tenant ID
         client_id: Azure client ID
         client_secret: Azure client secret
+        app_names: Single or List of display names
         schema: PySpark StructType schema for the DataFrame
 
     Returns:
         PySpark DataFrame containing enterprise applications data
     Raises:
-        Exception: when failed to authenticate or read from MS graph
+        HTTPException: when failed to authenticate or read from MS graph
     """
+
+    if isinstance(app_names, str):
+        app_names = list(app_names)
 
     auth_data = {
         "grant_type": "client_credentials",
@@ -78,36 +83,34 @@ def azure_apps(
     auth_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
     auth_response = requests.post(auth_url, data=auth_data)
 
-    if auth_response.status_code != 200:
-        raise Exception(f"Unable to get access token: {auth_response.text}")
+    auth_response.raise_for_status()
 
     access_token = auth_response.json().get("access_token")
-    headers = {"Authorization": f"Bearer {access_token}"}
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "ConsistencyLevel": "eventual",
+    }
 
     apps_data = []
-    url = "https://graph.microsoft.com/v1.0/servicePrincipals"
 
-    while url:
+    for app in app_names:
+        url = f'https://graph.microsoft.com/v1.0/servicePrincipals?$search="displayName:{app}"'
         response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Failed to fetch enterprise applications: {response.text}")
 
-        data = response.json()
+        response.raise_for_status()
 
-        for app in data.get("value", []):
+        for value in response.json().get("value", []):
             app_details = {
-                "id": app.get("id"),
-                "app_id": app.get("appId"),
-                "account_enabled": app.get("accountEnabled"),
-                "display_name": app.get("displayName"),
-                "service_principal_names": app.get("servicePrincipalNames"),
-                "service_principal_type": app.get("servicePrincipalType"),
-                "created_datetime": app.get("createdDateTime"),
-                "deleted_datetime": app.get("deletedDateTime"),
+                "id": value.get("id"),
+                "app_id": value.get("appId"),
+                "account_enabled": value.get("accountEnabled"),
+                "display_name": value.get("displayName"),
+                "service_principal_names": value.get("servicePrincipalNames"),
+                "service_principal_type": value.get("servicePrincipalType"),
+                "created_datetime": value.get("createdDateTime"),
+                "deleted_datetime": value.get("deletedDateTime"),
             }
             apps_data.append(app_details)
-
-        url = data.get("@odata.nextLink")
 
     return spark.createDataFrame(apps_data, schema=schema)
 
@@ -137,7 +140,6 @@ azure_apps_schema = StructType(
     ]
 )
 
-# Define the schema for Event Hub storage logs
 eventhub_logs_schema = StructType(
     [
         StructField(
