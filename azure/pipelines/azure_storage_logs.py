@@ -174,15 +174,31 @@ def information_details():
 
 @dlt.table
 def azure_application_details():
-    if get_azure_apps:
-        return azure_apps(
-            spark=spark,
-            tenant_id=tenant_id,
-            client_id=client_id,
-            client_secret=client_secret,
-            schema=azure_apps_schema,
+    try:
+        df_creds = spark.read.table("system.information_schema.storage_credentials")
+
+        app_names: list[str] = (
+            df_creds.select(
+                F.collect_set(
+                    F.regexp_extract("credential", "accessConnectors/(.*?),mi_id", 1)
+                ).alias("access_connector_name")
+            )
+            .first()
+            .access_connector_name
         )
-    return spark.createDataFrame([], azure_apps_schema)
+
+        if app_names:
+            return azure_apps(
+                spark=spark,
+                tenant_id=tenant_id,
+                client_id=client_id,
+                client_secret=client_secret,
+                app_names=app_names,
+                schema=azure_apps_schema,
+            )
+        return spark.createDataFrame([], azure_apps_schema)
+    except Exception:
+        return spark.createDataFrame([], azure_apps_schema)
 
 
 @dlt.table
