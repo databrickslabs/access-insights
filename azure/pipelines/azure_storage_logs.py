@@ -10,12 +10,12 @@ spark = SparkSession.builder.getOrCreate()
 sys.path.append(spark.conf.get("bundle.sourcePath"))
 
 from pipelines.utils import (
-    parse_storage_path,
-    parse_eventhub_logs,
-    hms_table_schema,
-    eventhub_logs_schema,
     azure_apps,
     azure_apps_schema,
+    eventhub_logs_schema,
+    hms_table_schema,
+    parse_storage_path,
+    parse_eventhub_logs,
 )
 
 dbutils = DBUtils(spark)
@@ -26,10 +26,6 @@ eh_namespace = spark.conf.get("eh-namespace")
 client_id = spark.conf.get("client-id")
 client_secret = dbutils.secrets.get(secret_scope, spark.conf.get("client-secret"))
 tenant_id = spark.conf.get("tenant-id")
-get_azure_apps = spark.conf.get("get-azure-apps")
-
-if get_azure_apps:
-    get_azure_apps = bool(get_azure_apps)
 
 sasl_config = f'kafkashaded.org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required clientId="{client_id}" clientSecret="{client_secret}" scope="https://{eh_namespace}/.default" ssl.protocol="SSL";'
 
