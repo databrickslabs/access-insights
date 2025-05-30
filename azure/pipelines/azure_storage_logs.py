@@ -280,7 +280,6 @@ def azure_storage_logs():
 
     df_result = df_result.where(
         (F.col("slog.category").isin("StorageWrite", "StorageDelete", "StorageRead"))
-        & (F.col("slog.properties.objectKey").like("%_delta_log%"))
         & (~F.col("slog.properties.objectKey").like("%unity%"))
         & (F.col("slog.statusText") == "Success")
     )
