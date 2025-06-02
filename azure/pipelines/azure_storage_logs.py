@@ -9,11 +9,16 @@ from pyspark.sql import functions as F
 spark = SparkSession.builder.getOrCreate()
 sys.path.append(spark.conf.get("bundle.sourcePath"))
 
-from pipelines.utils import (
-    azure_apps,
+from pipelines.schemas import (
     azure_apps_schema,
     eventhub_logs_schema,
     hms_table_schema,
+    table_details_schema,
+)
+
+from pipelines.utils import (
+    azure_apps,
+    collect_table_details,
     parse_storage_path,
     parse_eventhub_logs,
 )
@@ -64,7 +69,7 @@ def gather_hms_details() -> DataFrame:
             if table.isTemporary:
                 continue
 
-            namespace = f"{hms_catalog}.{table.database}.{table.tableName}"
+            namespace = f"`{hms_catalog}`.`{table.database}`.`{table.tableName}`"
             try:
                 tbl_metadata = spark.sql(f"DESCRIBE EXTENDED {namespace}").filter(
                     filter_statement
@@ -165,6 +170,8 @@ def information_details():
         )
     )
 
+    df = collect_table_details(spark=spark, df=df, schema=table_details_schema)
+
     return df
 
 
@@ -224,6 +231,8 @@ def azure_storage_logs():
         F.coalesce(F.col("info.full_namespace"), F.lit("foreign")).alias(
             "full_namespace"
         ),
+        F.col("info.table_details"),
+        F.col("info.status").alias("table_status"),
         F.coalesce(
             F.col("info.storage_path"),
             F.concat(
@@ -271,7 +280,6 @@ def azure_storage_logs():
 
     df_result = df_result.where(
         (F.col("slog.category").isin("StorageWrite", "StorageDelete", "StorageRead"))
-        & (F.col("slog.properties.objectKey").like("%_delta_log%"))
         & (~F.col("slog.properties.objectKey").like("%unity%"))
         & (F.col("slog.statusText") == "Success")
     )

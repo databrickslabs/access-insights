@@ -76,3 +76,9 @@ These configurations are all contained in the file `./databricks.yml`, and need 
 * Adjust the log categories selected based on your specific monitoring requirements.
 * For detailed instructions on Azure Diagnostic Settings, refer to the official Azure documentation.
 * Adjust the asset bundle settings under `./databricks.yml`, and `/resources` for specific deployment considerations
+
+
+## Limitations
+
+1. Hive metastore details will only be captured from the workspace where the pipeline is running 
+
