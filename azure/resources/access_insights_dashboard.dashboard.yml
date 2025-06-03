@@ -1,0 +1,6 @@
+resources:
+  dashboards:
+    access_insights_dashboard:
+      display_name: "access_insights_dashboard"
+      warehouse_id: ${var.warehouse_id}
+      file_path: ../dashboards/access_insights_dashboard.lvdash.json

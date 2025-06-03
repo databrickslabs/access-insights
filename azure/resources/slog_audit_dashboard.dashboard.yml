@@ -1,6 +1,0 @@
-resources:
-  dashboards:
-    slog_audit_dashboard:
-      display_name: "slog_audit_dashboard"
-      warehouse_id: ${var.warehouse_id}
-      file_path: ../dashboards/slog_audit_dashboard.lvdash.json

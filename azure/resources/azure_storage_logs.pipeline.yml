@@ -1,8 +1,8 @@
 resources:
   pipelines:
-    azure_slog_pipeline:
-      name: azure_slog_pipeline
-      catalog: slog
+    azure_access_insights_pipeline:
+      name: azure_access_insights_pipeline
+      catalog: access_insights
       schema: default
       configuration: ${var.pipeline_configuration}
       clusters:

@@ -3,22 +3,22 @@
     {
       "name": "c7a73033",
       "displayName": "actions_overtime",
-      "query": "SELECT\n  storage_time,\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  category,\n  operationName,\n  statusText,\n  durationMs,\n  callerIpAddress,\n  authType,\n  authObjectId,\n  userAgentHeader,\n  clientRequestId,\n  objectKey\nFROM slog.default.azure_storage_logs"
+      "query": "SELECT\n  storage_time,\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  category,\n  operationName,\n  statusText,\n  durationMs,\n  callerIpAddress,\n  authType,\n  authObjectId,\n  userAgentHeader,\n  clientRequestId,\n  objectKey\nFROM access_insights.default.azure_storage_logs"
     },
     {
       "name": "0b4a4101",
       "displayName": "table_details",
-      "query": "SELECT \n    table_catalog,\n    table_schema,\n    table_name,\n    full_namespace,\n    storage_path,\n    parsed_path,\n    table_type,\n    data_source_format,\n    table_details,\n    status,\n    table_details.size_in_bytes * 0.000001 as size_in_mb,\n    table_details.num_files,\n    CASE WHEN status IS NOT NULL THEN 'Failed to Gather Details' ELSE NULL END AS error\nFROM slog.default.all_table_details"
+      "query": "SELECT \n    table_catalog,\n    table_schema,\n    table_name,\n    full_namespace,\n    storage_path,\n    parsed_path,\n    table_type,\n    data_source_format,\n    table_details,\n    status,\n    table_details.size_in_bytes * 0.000001 as size_in_mb,\n    table_details.num_files,\n    CASE WHEN status IS NOT NULL THEN 'Failed to Gather Details' ELSE NULL END AS error\nFROM access_insights.default.all_table_details"
     },
     {
       "name": "37d08591",
       "displayName": "actions_counts",
-      "query": "WITH storage_creds_cte AS (\n  SELECT DISTINCT\n    REGEXP_EXTRACT(credential, 'accessConnectors\\/(.*?)\\,mi_id') as access_credential,\n    id,\n    app_id\n  FROM system.information_schema.storage_credentials\n  LEFT JOIN slog.default.azure_application_details ON REGEXP_EXTRACT(credential, 'accessConnectors\\/(.*?)\\,mi_id') = display_name\n)\nSELECT\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  authType,\n  authObjectId,\n  storage_creds_cte.access_credential,\n  userAgentHeader,\n  CASE WHEN storage_creds_cte.access_credential IS NOT NULL THEN 'databricks' ELSE 'external' END requester,\n  SUM(\n    CASE\n      WHEN category = 'StorageWrite' THEN 1\n      ELSE 0\n    END\n  ) AS StorageWrite,\n  SUM(\n    CASE\n      WHEN category = 'StorageDelete' THEN 1\n      ELSE 0\n    END\n  ) AS StorageDelete,\n  SUM(\n    CASE\n      WHEN category = 'StorageRead' THEN 1\n      ELSE 0\n    END\n  ) AS StorageRead\nFROM\n  slog.default.azure_storage_logs\n  LEFT JOIN storage_creds_cte ON authObjectId = storage_creds_cte.id\nGROUP BY\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  authType,\n  authObjectId,\n  userAgentHeader,\n  requester,\n  storage_creds_cte.access_credential"
+      "query": "WITH storage_creds_cte AS (\n  SELECT DISTINCT\n    REGEXP_EXTRACT(credential, 'accessConnectors\\/(.*?)\\,mi_id') as access_credential,\n    id,\n    app_id\n  FROM system.information_schema.storage_credentials\n  LEFT JOIN access_insights.default.azure_application_details ON REGEXP_EXTRACT(credential, 'accessConnectors\\/(.*?)\\,mi_id') = display_name\n)\nSELECT\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  authType,\n  authObjectId,\n  storage_creds_cte.access_credential,\n  userAgentHeader,\n  CASE WHEN storage_creds_cte.access_credential IS NOT NULL THEN 'databricks' ELSE 'external' END requester,\n  SUM(\n    CASE\n      WHEN category = 'StorageWrite' THEN 1\n      ELSE 0\n    END\n  ) AS StorageWrite,\n  SUM(\n    CASE\n      WHEN category = 'StorageDelete' THEN 1\n      ELSE 0\n    END\n  ) AS StorageDelete,\n  SUM(\n    CASE\n      WHEN category = 'StorageRead' THEN 1\n      ELSE 0\n    END\n  ) AS StorageRead\nFROM\n  access_insights.default.azure_storage_logs\n  LEFT JOIN storage_creds_cte ON authObjectId = storage_creds_cte.id\nWHERE storage_path <> 'abfss://@.dfs.core.windows.net/'\nGROUP BY\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  authType,\n  authObjectId,\n  userAgentHeader,\n  requester,\n  storage_creds_cte.access_credential"
     },
     {
       "name": "89a92a69",
       "displayName": "readers_writers",
-      "query": "WITH storage_creds_cte AS (\n  SELECT DISTINCT\n    REGEXP_EXTRACT(credential, 'accessConnectors\\/(.*?)\\,mi_id') as access_credential,\n    id,\n    app_id\n  FROM system.information_schema.storage_credentials\n  LEFT JOIN slog.default.azure_application_details ON REGEXP_EXTRACT(credential, 'accessConnectors\\/(.*?)\\,mi_id') = display_name\n),\ncte_details AS (\n  SELECT\n    subscription_id,\n    resource_group,\n    storage_account,\n    table_catalog,\n    table_schema,\n    table_name,\n    full_namespace,\n    storage_path,\n    table_type,\n    data_source_format,\n    table_status,\n    table_details,\n    authType,\n    authObjectId,\n    storage_creds_cte.access_credential,\n    userAgentHeader,\n    CASE WHEN storage_creds_cte.access_credential IS NOT NULL THEN 'databricks' ELSE 'external' END requester,\n    category\n  FROM\n    slog.default.azure_storage_logs\n    LEFT JOIN storage_creds_cte ON authObjectId = storage_creds_cte.id\n)\nSELECT\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  table_details.size_in_bytes * 0.000001 as size_in_mb,\n  table_details.num_files,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageRead\"\n        AND requester = 'external'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as external_read,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageWrite\"\n        AND requester = 'external'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as external_write,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageRead\"\n        AND requester = 'databricks'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as uc_read,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageWrite\"\n        AND requester = 'databricks'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as uc_write,\n  CASE\n    WHEN uc_read > 0\n      AND uc_write = 0\n      AND external_read = 0\n      AND external_write = 0\n    THEN\n      'Databricks readers'\n    WHEN uc_read = 0\n      AND uc_write > 0\n      AND external_read = 0\n      AND external_write = 0\n    THEN\n      'Databricks writers'\n    WHEN uc_read > 0\n      AND uc_write > 0\n      AND external_read = 0\n      AND external_write = 0\n    THEN\n      'Databricks readers & writers'\n    WHEN \n      uc_read >= 0\n      AND uc_write >= 0\n      AND external_read > 0\n      AND external_write = 0\n    THEN\n      'Non-Databricks readers'\n    WHEN \n      uc_read >= 0\n      AND uc_write >= 0\n      AND external_read = 0\n      AND external_write > 0\n    THEN\n      'Non-Databricks writers'\n    WHEN \n      uc_read >= 0\n      AND uc_write >= 0\n      AND external_read > 0\n      AND external_write > 0\n    THEN\n      'Non-Databricks readers & writers'\n    WHEN \n      uc_read = 0\n      AND uc_write = 0\n      AND external_read = 0\n      AND external_write = 0\n    THEN\n      'No readers or writers'\n    END as classification\nFROM\n  cte_details\nGROUP BY\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  table_details.size_in_bytes,\n  table_details.num_files"
+      "query": "WITH storage_creds_cte AS (\n  SELECT DISTINCT\n    REGEXP_EXTRACT(credential, 'accessConnectors\\/(.*?)\\,mi_id') as access_credential,\n    id,\n    app_id\n  FROM system.information_schema.storage_credentials\n  LEFT JOIN access_insights.default.azure_application_details ON REGEXP_EXTRACT(credential, 'accessConnectors\\/(.*?)\\,mi_id') = display_name\n),\ncte_details AS (\n  SELECT\n    subscription_id,\n    resource_group,\n    storage_account,\n    table_catalog,\n    table_schema,\n    table_name,\n    full_namespace,\n    storage_path,\n    table_type,\n    data_source_format,\n    table_status,\n    table_details,\n    authType,\n    authObjectId,\n    storage_creds_cte.access_credential,\n    userAgentHeader,\n    CASE WHEN storage_creds_cte.access_credential IS NOT NULL THEN 'databricks' ELSE 'external' END requester,\n    category\n  FROM\n    access_insights.default.azure_storage_logs\n    LEFT JOIN storage_creds_cte ON authObjectId = storage_creds_cte.id\n    WHERE storage_path <> 'abfss://@.dfs.core.windows.net/'\n)\nSELECT\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  table_details.size_in_bytes * 0.000001 as size_in_mb,\n  table_details.num_files,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageRead\"\n        AND requester = 'external'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as external_read,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageWrite\"\n        AND requester = 'external'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as external_write,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageRead\"\n        AND requester = 'databricks'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as uc_read,\n  SUM(\n    CASE\n      WHEN\n        category = \"StorageWrite\"\n        AND requester = 'databricks'\n      THEN\n        1\n      ELSE 0\n    END\n  ) as uc_write,\n  CASE\n    WHEN uc_read > 0\n      AND uc_write = 0\n      AND external_read = 0\n      AND external_write = 0\n    THEN\n      'Databricks readers'\n    WHEN uc_read = 0\n      AND uc_write > 0\n      AND external_read = 0\n      AND external_write = 0\n    THEN\n      'Databricks writers'\n    WHEN uc_read > 0\n      AND uc_write > 0\n      AND external_read = 0\n      AND external_write = 0\n    THEN\n      'Databricks readers & writers'\n    WHEN \n      uc_read >= 0\n      AND uc_write >= 0\n      AND external_read > 0\n      AND external_write = 0\n    THEN\n      'Non-Databricks readers'\n    WHEN \n      uc_read >= 0\n      AND uc_write >= 0\n      AND external_read = 0\n      AND external_write > 0\n    THEN\n      'Non-Databricks writers'\n    WHEN \n      uc_read >= 0\n      AND uc_write >= 0\n      AND external_read > 0\n      AND external_write > 0\n    THEN\n      'Non-Databricks readers & writers'\n    WHEN \n      uc_read = 0\n      AND uc_write = 0\n      AND external_read = 0\n      AND external_write = 0\n    THEN\n      'No readers or writers'\n    END as classification\nFROM\n  cte_details\nGROUP BY\n  subscription_id,\n  resource_group,\n  storage_account,\n  table_catalog,\n  table_schema,\n  table_name,\n  full_namespace,\n  storage_path,\n  table_type,\n  data_source_format,\n  table_details.size_in_bytes,\n  table_details.num_files"
     }
   ],
   "pages": [
@@ -882,7 +882,7 @@
             "name": "aec590bc",
             "queries": [
               {
-                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_userAgentHeader",
+                "name": "dashboards/01f0300e3d34136397a056e901b120c0/datasets/01f03bc81ce11770a3e575d513cf9e97_userAgentHeader",
                 "query": {
                   "datasetName": "c7a73033",
                   "fields": [
@@ -899,7 +899,7 @@
                 }
               },
               {
-                "name": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_userAgentHeader",
+                "name": "dashboards/01f0300e3d34136397a056e901b120c0/datasets/01f03bc81ce117f38cf70eeae06930d8_userAgentHeader",
                 "query": {
                   "datasetName": "37d08591",
                   "fields": [
@@ -917,26 +917,26 @@
               }
             ],
             "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
               "encodings": {
                 "fields": [
                   {
-                    "displayName": "userAgentHeader",
                     "fieldName": "userAgentHeader",
-                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f58a74019d3b9212804d8362ebc_userAgentHeader"
+                    "displayName": "userAgentHeader",
+                    "queryName": "dashboards/01f0300e3d34136397a056e901b120c0/datasets/01f03bc81ce11770a3e575d513cf9e97_userAgentHeader"
                   },
                   {
-                    "displayName": "userAgentHeader",
                     "fieldName": "userAgentHeader",
-                    "queryName": "dashboards/01f02f58a4391af9829f59c2536ce9c8/datasets/01f02f5f2c0a1fc3bb20acbba10a19b6_userAgentHeader"
+                    "displayName": "userAgentHeader",
+                    "queryName": "dashboards/01f0300e3d34136397a056e901b120c0/datasets/01f03bc81ce117f38cf70eeae06930d8_userAgentHeader"
                   }
                 ]
               },
               "frame": {
                 "showTitle": true,
                 "title": "User Agent"
-              },
-              "version": 2,
-              "widgetType": "filter-multi-select"
+              }
             }
           },
           "position": {

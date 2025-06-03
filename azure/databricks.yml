@@ -1,5 +1,5 @@
 bundle:
-  name: slog
+  name: access_insights
 
 variables:
   warehouse_id:
@@ -14,10 +14,17 @@ variables:
       bundle.sourcePath: ${workspace.file_path}
       secret-scope: slog-scope
       eh-name: slog
-      eh-namespace: <event hub namespace>
-      client-id: < client id >
-      client-secret: < client secret >
-      tenant-id: < tenant id >
+      eh-namespace: eh-sezsandbox-01.servicebus.windows.net # <event hub namespace>
+      client-id: 6aa3eadf-35c3-4d01-8599-b7bb9de8d6c8 # < client id >
+      client-secret: client-secret # < client secret >
+      tenant-id: bf465dc7-3bc8-4944-b018-092572b5c20d
+
+      # secret-scope: < secret scope >
+      # eh-name: < event hub name >
+      # eh-namespace: <event hub namespace>
+      # client-id: < client id >
+      # client-secret: < client secret >
+      # tenant-id: < tenant id >
 
 include:
   - resources/*.yml

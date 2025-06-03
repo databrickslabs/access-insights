@@ -206,23 +206,23 @@ def azure_application_details():
 
 @dlt.table
 def azure_storage_logs():
-    df_slog = spark.read.table("azure_storage_logs_raw").alias("slog")
+    df_insights = spark.read.table("azure_storage_logs_raw").alias("insights")
     df_info = spark.read.table("all_table_details").alias("info")
 
-    df_join = df_slog.join(
+    df_join = df_insights.join(
         df_info,
         on=F.expr(
-            "slog.properties.objectKey LIKE CONCAT('%', info.parsed_path, '%') AND info.parsed_path != ''"
+            "insights.properties.objectKey LIKE CONCAT('%', info.parsed_path, '%') AND info.parsed_path != ''"
         ),
         how="left",
     )
 
     # Select and transform the required columns
     df_result = df_join.select(
-        F.to_timestamp(F.col("slog.time")).alias("storage_time"),
-        F.split(F.col("slog.resourceId"), "/")[2].alias("subscription_id"),
-        F.split(F.col("slog.resourceId"), "/")[4].alias("resource_group"),
-        F.split(F.col("slog.resourceId"), "/")[8].alias("storage_account"),
+        F.to_timestamp(F.col("insights.time")).alias("storage_time"),
+        F.split(F.col("insights.resourceId"), "/")[2].alias("subscription_id"),
+        F.split(F.col("insights.resourceId"), "/")[4].alias("resource_group"),
+        F.split(F.col("insights.resourceId"), "/")[8].alias("storage_account"),
         F.coalesce(F.col("info.table_catalog"), F.lit("foreign")).alias(
             "table_catalog"
         ),
@@ -239,7 +239,7 @@ def azure_storage_logs():
                 F.lit("abfss://"),
                 F.regexp_extract(
                     F.regexp_extract(
-                        F.col("slog.properties.objectKey"), "(.*)(/_delta_log)", 1
+                        F.col("insights.properties.objectKey"), "(.*)(/_delta_log)", 1
                     ),
                     "^/[^/]+/([^/]+)",
                     1,
@@ -247,7 +247,7 @@ def azure_storage_logs():
                 F.lit("@"),
                 F.regexp_extract(
                     F.regexp_extract(
-                        F.col("slog.properties.objectKey"), "(.*)(/_delta_log)", 1
+                        F.col("insights.properties.objectKey"), "(.*)(/_delta_log)", 1
                     ),
                     "^/([^/]+)",
                     1,
@@ -255,7 +255,7 @@ def azure_storage_logs():
                 F.lit(".dfs.core.windows.net/"),
                 F.regexp_extract(
                     F.regexp_extract(
-                        F.col("slog.properties.objectKey"), "(.*)(/_delta_log)", 1
+                        F.col("insights.properties.objectKey"), "(.*)(/_delta_log)", 1
                     ),
                     "^/[^/]+/[^/]+/(.*)",
                     1,
@@ -266,22 +266,26 @@ def azure_storage_logs():
         F.coalesce(F.col("info.data_source_format"), F.lit("DELTA")).alias(
             "data_source_format"
         ),
-        F.col("slog.category"),
-        F.col("slog.operationName"),
-        F.col("slog.statusText"),
-        F.col("slog.durationMs"),
-        F.col("slog.callerIpAddress"),
-        F.col("slog.identity.type").alias("authType"),
-        F.col("slog.identity.requester.objectId").alias("authObjectId"),
-        F.col("slog.properties.userAgentHeader").alias("userAgentHeader"),
-        F.col("slog.properties.clientRequestId").alias("clientRequestId"),
-        F.col("slog.properties.objectKey").alias("objectKey"),
+        F.col("insights.category"),
+        F.col("insights.operationName"),
+        F.col("insights.statusText"),
+        F.col("insights.durationMs"),
+        F.col("insights.callerIpAddress"),
+        F.col("insights.identity.type").alias("authType"),
+        F.col("insights.identity.requester.objectId").alias("authObjectId"),
+        F.col("insights.properties.userAgentHeader").alias("userAgentHeader"),
+        F.col("insights.properties.clientRequestId").alias("clientRequestId"),
+        F.col("insights.properties.objectKey").alias("objectKey"),
     )
 
     df_result = df_result.where(
-        (F.col("slog.category").isin("StorageWrite", "StorageDelete", "StorageRead"))
-        & (~F.col("slog.properties.objectKey").like("%unity%"))
-        & (F.col("slog.statusText") == "Success")
+        (
+            F.col("insights.category").isin(
+                "StorageWrite", "StorageDelete", "StorageRead"
+            )
+        )
+        & (~F.col("insights.properties.objectKey").like("%unity%"))
+        & (F.col("insights.statusText") == "Success")
     )
 
     return df_result
