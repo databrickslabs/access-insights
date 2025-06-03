@@ -1,5 +1,5 @@
 bundle:
-  name: slog
+  name: access_insights
 
 variables:
   warehouse_id:
@@ -12,8 +12,8 @@ variables:
     type: complex 
     default:
       bundle.sourcePath: ${workspace.file_path}
-      secret-scope: slog-scope
-      eh-name: slog
+      secret-scope: < secret scope >
+      eh-name: < event hub name >
       eh-namespace: <event hub namespace>
       client-id: < client id >
       client-secret: < client secret >
@@ -31,7 +31,7 @@ targets:
     mode: development
     default: true
     workspace:
-      host: https://adb-1720970340056130.10.azuredatabricks.net/ # modify the target workspace 
+      host: https://<workspace url>/ # modify the target workspace 
 
   ## Optionally, there could be 'staging' or 'prod' targets here.
   #

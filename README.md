@@ -1,10 +1,10 @@
-# SLOG
+# Access Insights
 
-SLOG - Storage Log Assessment
+Access Insights - gather details into readers and writers to external tables from storage logs 
 
 ## Project Description
 
-SLOG helps customers understand the distribution of their data in Cloud Storage in terms of [Unity Catalog Managed vs External](https://docs.databricks.com/aws/en/data-governance/unity-catalog/#managed-versus-external-tables-and-volumes) to help them find good candidates for migration from External to Managed configuration. It explores whether or not External Tables are leveraged by external tools.  
+Access Insights helps customers understand the distribution of their data in Cloud Storage in terms of [Unity Catalog Managed vs External](https://docs.databricks.com/aws/en/data-governance/unity-catalog/#managed-versus-external-tables-and-volumes) to help them find good candidates for migration from External to Managed configuration. It explores whether or not External Tables are leveraged by external tools.  
 
 ## Why Migrate
 
@@ -22,6 +22,7 @@ Cloud Storage Events need to be captured in order to view the distribution of Ma
  
 - [AWS](aws/README.md)
 - [Azure](azure/README.md)
+- [GCP](gcp/README.md)
 
 The rest of the repo assumes that the resources are provisioned.
 
