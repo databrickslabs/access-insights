@@ -1,15 +1,31 @@
 bundle:
-  name: slog
+  name: access_insights
+
+variables:
+  warehouse_id:
+    description: An existing warehouse
+    lookup:
+      warehouse: 'Starter Endpoint'
+
+  pipeline_configuration:
+    description: Pipeline configuraiton details 
+    type: complex 
+    default:
+      bundle.sourcePath: ${workspace.file_path}
 
 include:
   - resources/*.yml
+
+sync:
+  include:
+    - pipelines/*.py
 
 targets:
   dev:
     mode: development
     default: true
     workspace:
-      host: https://adb-1720970340056130.10.azuredatabricks.net/ # modify the target workspace 
+      host: https://e2-demo-field-eng.cloud.databricks.com/editor/files/3054820919473696?o=1444828305810485 # modify the target workspace 
 
   ## Optionally, there could be 'staging' or 'prod' targets here.
   #
