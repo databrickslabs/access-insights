@@ -1,6 +1,5 @@
 import dlt
 from pyspark.sql.functions import col, explode, to_date
-from utilities import utils
 
 schema_hints = """Records.element.requestParameters map<string, string>,
                      Records.element.responseElements map<string, string>,
@@ -46,7 +45,7 @@ def cloudtrail_logs():
           .select(explode('Records').alias('record')) # flatten the nested records
           .select(
             'record.*', 
-            col('_metadata.file_path').alias('filename'), 
+            #col('_metadata.file_path').alias('filename'), 
             to_date('record.eventTime').alias('eventDate')
           )
           .filter(col("eventDate") >= "2025-04-28")
