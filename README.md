@@ -35,7 +35,11 @@ A Databricks Asset bundle is created for each of the cloud providers above. Use 
 bundle will deploy the following assets. 
 
 - `pipeline`: A DLT pipeline to create and manage storage log tables 
-- `dashboard`: A dashboard that leverages the tables created from the DLT pipeline, and system tables. 
-  - External tables are flagged as good candidates to be migrated to a managed tables based on the read and write actions
-  - If an external table is only accessed via a UC access connector, then the table is marked as "Good Candidate for Migration". Otherwise, more investigation is needed before moving the table.
+- `dashboard`: A dashboard that leverages the tables created from the Declartive pipeline, and system tables. 
+  - Tables are classifed as:
+    - `Databricks Readers`: Table(s) that have Storage Events that are only Reads from within Databricks Unity Catalog
+    - `Databricks Readers & Writers`: Table(s) that have Storage Events that contain both Read & Write events but are within Databricks Unity Catalog
+    - `Non-Databricks Readers`: Table(s) that may be a blend of Databricks + External read events and classified considered as external, i.e. having external tools not using Unity Catalog
+    - `Non-Databricks Readers + Writers`: Table(s) that may be a blend of Databricks + External read and write events that will be classified as external, i.e. having external tools that read/write to the table(s) not using Unity Catalog
 
+  ![Access Insights Dashboard](/imgs/dashboard_sample.png)
