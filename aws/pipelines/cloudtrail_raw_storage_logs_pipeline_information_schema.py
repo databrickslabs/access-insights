@@ -75,14 +75,15 @@ def cloudtrail_with_auditevents():
 @dlt.table
 def cloudtrail_logs_with_path():
     json_data = (
-        dlt.read("access_insights.default.cloudtrail_logs")
+        dlt.read("access_insights.default.cloudtrail_with_auditevents")
         .select(
             col("eventID"),
             col("eventName"),
             col("eventTime"),
             get_json_object(to_json(col("requestParameters")), "$.policy").alias("policy_json"),
             col("responseElements"),
-            col("userAgent")
+            col("userAgent"),
+            col("aws_access_key_id")
         )
     )
 
@@ -100,7 +101,8 @@ def cloudtrail_logs_with_path():
                     "array<struct<Effect:string,Action:array<string>,Resource:array<string>,Condition:map<string,map<string,array<string>>>>>"
                 )
             ).alias("Statement"),
-            col("responseElements")
+            col("responseElements"),
+            col("aws_access_key_id")
         )
     )
 
@@ -119,7 +121,8 @@ def cloudtrail_logs_with_path():
             col("Statement.Condition"),
             explode(col("Statement.Action")).alias("Action2"),
             explode(col("Statement.Resource")).alias("Resource2"),
-            col("responseElements")
+            col("responseElements"),
+            col("aws_access_key_id")
         )
     )
 
@@ -136,5 +139,6 @@ def cloudtrail_logs_with_path():
         col("Action2"),
         col("responseElements"),
         regexp_replace(col("Resource2"), "arn:aws:s3:::", "s3://").alias("Resource2"),
-        col("Condition")
+        col("Condition"),
+        col("aws_access_key_id")
     )
