@@ -1,7 +1,8 @@
 # AWS Prerequisites
 
-The following are required for tracking access to managed and external tables in AWS:
+Storage Logs in AWS will need to be routed to a central location via CLoud Trail. Route them to a Central Storage Account. This pipeline is configured to leverage an S3 from central CLoudTrail.
 
+The following are required for tracking access to managed and external tables in AWS:
 - CloudTrail setup
 - S3 setup
 - Onboarding on Databricks
@@ -31,3 +32,19 @@ The following are required for tracking access to managed and external tables in
 
 - Click Enable under "Service Access Logging" and provide a destination bucket. Browse the list of available S3 buckets and select the log bucket created during the CloudTrail configuration. 
 ![](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*Jfi3NsQejX9QRnWilKxjuw.png)
+
+## Pipeline Configurations
+
+These configurations are all contained in the file `./databricks.yml`, and need to be changed before deploying.
+
+- `host`: workspace URL to deploy the resources to 
+- `ingestPath`: Path to your cloud trail (Egs:-'s3://databricks-deployment-fe/AWSLogs/997819012307/CloudTrail/*/*/*/*/*') 
+- `secret-scope`: secret scope in the target workspace
+- `Default catalog`: Catalog to create your schema to store your tables and views
+- `Default schema`: schema to store your tables and views
+
+
+## Limitations
+
+1. Hive metastore details will only be captured from the workspace where the pipeline is running 
+1. CloudTrail Logs needs to be configured to right options to capture right events.
