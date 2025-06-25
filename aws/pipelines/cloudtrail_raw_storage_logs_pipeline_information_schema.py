@@ -72,7 +72,9 @@ filter_statement = (
     (col("col_name") == 'Location')
 )    
 # crawl all the tables in hive_metastore
-@dlt.table
+@dlt.table(
+  name="hms_details"
+)
 def gather_hms_details():
     hms_catalog = 'hive_metastore'
     table_details = []
