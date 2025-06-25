@@ -50,6 +50,70 @@ def joined_audit_information():
     info_schema_df = dlt.read("information_schema")
     
     return audit_df.join(info_schema_df, audit_df["table_full_name"] == info_schema_df["full_table_name"], "inner")
+    
+from dataclasses import dataclass    
+@dataclass
+class Table:
+    catalog: str
+    database: str
+    name: str
+    table_format: str | None = None
+    table_type: str | None = None
+    location_uri: str | None = None
+    status: str | None = None
+
+
+filter_statement = (
+    (col("col_name") == 'Catalog') |
+    (col("col_name") == 'Database') |
+    (col("col_name") == 'Table') |
+    (col("col_name") == 'Type') |
+    (col("col_name") == 'Provider') |
+    (col("col_name") == 'Location')
+)    
+# crawl all the tables in hive_metastore
+@dlt.table(
+  name="hms_details"
+)
+def gather_hms_details():
+    hms_catalog = 'hive_metastore'
+    table_details = []
+    dbs = spark.sql(f"SHOW SCHEMAS IN {hms_catalog}")
+
+    for db in dbs.collect():
+        tables = spark.sql(f"SHOW TABLES IN {hms_catalog}.{db.databaseName}")
+        for table in tables.collect():
+            if table.isTemporary:
+                continue
+
+            namespace = f"{hms_catalog}.{table.database}.{table.tableName}" 
+            try:
+                tbl_metadata = spark.sql(f"DESCRIBE EXTENDED {namespace}").filter(filter_statement)
+                tbl_metadata = tbl_metadata.groupBy().pivot("col_name").agg({"data_type": "first"}).first()
+
+                table_details.append(Table(
+                    catalog=tbl_metadata.Catalog,
+                    database=tbl_metadata.Database,
+                    name=tbl_metadata.Table,
+                    table_format=tbl_metadata.Provider,
+                    table_type=tbl_metadata.Type,
+                    location_uri=tbl_metadata.Location,
+                    status=None,
+                ))
+
+            except Exception as exc:
+                print(f"fail {namespace}")
+                table_details.append(Table(
+                    catalog=hms_catalog,
+                    database=table.database,
+                    name=table.tableName,
+                    table_format=None,
+                    table_type=None,
+                    location_uri=None,
+                    status=str(exc),
+                ))
+                
+    return spark.createDataFrame(table_details,schema="catalog string, database string, name string, table_format string, table_type string, location_uri string, status string")    
 
 @dlt.table
 def cloudtrail_with_auditevents():
@@ -75,14 +139,15 @@ def cloudtrail_with_auditevents():
 @dlt.table
 def cloudtrail_logs_with_path():
     json_data = (
-        dlt.read("access_insights.default.cloudtrail_logs")
+        dlt.read("access_insights.default.cloudtrail_with_auditevents")
         .select(
             col("eventID"),
             col("eventName"),
             col("eventTime"),
             get_json_object(to_json(col("requestParameters")), "$.policy").alias("policy_json"),
             col("responseElements"),
-            col("userAgent")
+            col("userAgent"),
+            col("aws_access_key_id")
         )
     )
 
@@ -100,7 +165,8 @@ def cloudtrail_logs_with_path():
                     "array<struct<Effect:string,Action:array<string>,Resource:array<string>,Condition:map<string,map<string,array<string>>>>>"
                 )
             ).alias("Statement"),
-            col("responseElements")
+            col("responseElements"),
+            col("aws_access_key_id")
         )
     )
 
@@ -119,7 +185,8 @@ def cloudtrail_logs_with_path():
             col("Statement.Condition"),
             explode(col("Statement.Action")).alias("Action2"),
             explode(col("Statement.Resource")).alias("Resource2"),
-            col("responseElements")
+            col("responseElements"),
+            col("aws_access_key_id")
         )
     )
 
@@ -136,5 +203,6 @@ def cloudtrail_logs_with_path():
         col("Action2"),
         col("responseElements"),
         regexp_replace(col("Resource2"), "arn:aws:s3:::", "s3://").alias("Resource2"),
-        col("Condition")
+        col("Condition"),
+        col("aws_access_key_id")
     )
