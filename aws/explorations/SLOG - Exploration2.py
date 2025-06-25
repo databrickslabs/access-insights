@@ -15,28 +15,23 @@
 # COMMAND ----------
 
 # MAGIC %sql
-# MAGIC -- Good Candidate, drill down into table min dbr, readers/writes per dbr, readers external, writers external
-# MAGIC -- dbr 15.4 and above
-# MAGIC -- no external readers and writers
-# MAGIC -- # of External Readers/Writers
-# MAGIC
 # MAGIC WITH good_candidates AS (
 # MAGIC   SELECT
-# MAGIC     table_full_name,
 # MAGIC     table_type,
-# MAGIC     --eventCategory,
-# MAGIC     --eventSource,
+# MAGIC     eventCategory,
+# MAGIC     eventSource,
+# MAGIC     table_full_name,
+# MAGIC     table_url,
 # MAGIC     data_source_format,
 # MAGIC     storage_path,
 # MAGIC     AssumeRole_count,
-# MAGIC     -- + COALESCE(ListObjects_count, 0)
-# MAGIC     COALESCE(GetObject_count, 0) AS `reads`,
-# MAGIC     COALESCE(PutObject_count, 0) + COALESCE(DeleteObject_count, 0) AS `writes`
+# MAGIC     COALESCE(GetObject_count, 0) + COALESCE(ListObjects_count, 0) AS reads,
+# MAGIC     COALESCE(PutObject_count, 0) + COALESCE(DeleteObject_count, 0) AS writes
 # MAGIC   FROM (
 # MAGIC     SELECT
 # MAGIC       table_type,
-# MAGIC       --eventCategory,
-# MAGIC       --eventSource,
+# MAGIC       eventCategory,
+# MAGIC       eventSource,
 # MAGIC       requestParameters.prefix AS prefix,
 # MAGIC       table_full_name,
 # MAGIC       table_url,
@@ -87,7 +82,11 @@
 # MAGIC   slog.default.cloudtrail_logs
 # MAGIC group by
 # MAGIC   userAgent
-# MAGIC
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC Select distinct(userIdentity.invokedBy) from slog.default.cloudtrail_logs
 
 # COMMAND ----------
 
@@ -112,13 +111,7 @@ plotdf = spark.sql("""
 
 # COMMAND ----------
 
-# MAGIC %sql
-# MAGIC select
-# MAGIC   *
-# MAGIC from
-# MAGIC   slog.default.cloudtrail_logs
-# MAGIC where userAgent=="lambda.amazonaws.com"
-# MAGIC
+display(plotdf)
 
 # COMMAND ----------
 
@@ -126,7 +119,7 @@ import matplotlib.pyplot as plt
 
 # Visualization 1: Distribution of requests by client type (bar chart)
 plt.figure(figsize=(14, 9))
-bars = plt.barh(plotdf['userAgent'], plotdf['count(*)'], color='skyblue')
+bars = plt.barh(plotdf['userAgent'], plotdf['count(1)'], color='skyblue')
 plt.xlabel('Number of Requests (log scale)', fontsize=14)
 plt.ylabel('Client Type', fontsize=14)
 plt.title('Distribution of Storage Access by Client Type', fontsize=16)
@@ -139,6 +132,26 @@ for bar in bars:
 
 plt.tight_layout()
 plt.show()
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC select 
+# MAGIC         case 
+# MAGIC             when userAgent like '%SDK%' or userAgent like '%sdk%' then 'SDK(java,ruby,js)' 
+# MAGIC             when userAgent like '%Boto%' then 'Boto' 
+# MAGIC             when userAgent like '%cli%' then 'cli' 
+# MAGIC             else userAgent 
+# MAGIC         end as userAgent, 
+# MAGIC         count(*) 
+# MAGIC     from slog.default.cloudtrail_logs 
+# MAGIC     group by 
+# MAGIC         case 
+# MAGIC             when userAgent like '%SDK%' or userAgent like '%sdk%' then 'SDK(java,ruby,js)' 
+# MAGIC             when userAgent like '%Boto%' then 'Boto' 
+# MAGIC             when userAgent like '%cli%' then 'cli' 
+# MAGIC             else userAgent 
+# MAGIC         end
 
 # COMMAND ----------
 
@@ -223,10 +236,10 @@ pivot_df = access_by_type2.pivot(index='userAgent', columns='table_type', values
 
 plt.figure(figsize=(20, 12))
 ax = pivot_df.plot(kind='bar', stacked=True, figsize=(20, 12), width=0.8)
-#plt.yscale('log')
+plt.yscale('log')
 plt.title('Access Types by Client', fontsize=16)
 plt.xlabel('Client Type', fontsize=14)
-plt.ylabel('Number of Requests', fontsize=14)
+plt.ylabel('Number of Requests (log scale)', fontsize=14)
 plt.xticks(rotation=45, ha='right')
 
 # Add total count and datatype to top of the bars
@@ -238,8 +251,3 @@ for i, (userAgent, row) in enumerate(pivot_df.iterrows()):
 
 plt.tight_layout()
 plt.show()
-
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC show create table main.dustinvannoy_stg2.watchhistory

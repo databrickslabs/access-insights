@@ -46,10 +46,9 @@ def cloudtrail_logs():
           .select(explode('Records').alias('record')) # flatten the nested records
           .select(
             'record.*', 
-            col('_metadata.file_path').alias('filename'), 
             to_date('record.eventTime').alias('eventDate')
           )
           .filter(col("eventDate") >= "2025-04-28")
-          .filter(col("record.eventSource").isin("sts.amazonaws.com", "s3.amazonaws.com"))
+          #.filter(col("record.eventSource").isin("sts.amazonaws.com", "s3.amazonaws.com"))
           .filter(col("record.eventName").isin("AssumeRole", "GetObject", "PutObject", "DeleteObject", "ListObjects"))
   )
