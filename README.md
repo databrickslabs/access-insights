@@ -14,26 +14,25 @@ UC managed tables provide numerous benefits over UC external tables, such as inc
 
 The following information may be useful when analyzing or converting UC external table candidates:
 
-**Table type**
-In this context, UC external tables should be identified to convert to UC managed.
-**External (non-Databricks) read/write access patterns** 
-Tables with Databricks reads/writes only, should be converted first
-Tables with external (non-Databricks) reads from tools that support reads from UC managed tables (see list, not exhaustive), can be converted next
-**Table size**
-Tables <1 TB should be converted first, followed by tables 1-10 TB size, followed by tables > 10 TB in size.
-**Path-based access**
-Tables who have readers/writers that use path-based access, must be updated to use name-based access, otherwise they will fail (for the time being). 
-**Use of the Uniform table feature**
-Tables with Uniform enabled, must have Uniform dropped before converting the table to be UC managed (for the time being), however, this does not necessarily impact which tables should be converted first.
-**Commit rate** 
-Tables with a lower commit rate (such as <2,000 commits/day) should be converted first, and those which are faster moving (such as >2,000 commits/day) should be converted last
-**Whether optimize jobs exist on a table**
-These should be canceled before conversion, since UC managed tables will take care of running optimizations automatically for you (not canceling may lead to conflicts).
-# of files
-Tables with appropriately sized files (not too many small files) are ideal to convert first.
-**Multiple Cloud Regions**
-If the default managed location of your Unity Catalog metastore, catalog, or schema is in a different cloud region from the storage location of the external table being converted, you may incur additional cross-region data transfer costs.
-
+- Table type
+  - In this context, UC external tables should be identified to convert to UC managed.
+- External (non-Databricks) read/write access patterns
+  - Tables with Databricks reads/writes only, should be converted first
+  - Tables with external (non-Databricks) reads from tools that support reads from UC managed tables (see list, not exhaustive), can be converted next
+- Table size
+  - Tables <1 TB should be converted first, followed by tables 1-10 TB size, followed by tables > 10 TB in size.
+- Path-based access
+  - Tables who have readers/writers that use path-based access, must be updated to use name-based access, otherwise they will fail (for the time being).
+- Use of the Uniform table feature
+  - Tables with Uniform enabled, must have Uniform dropped before converting the table to be UC managed (for the time being), however, this does not necessarily impact which tables should be converted first.
+- Commit rate
+  - Tables with a lower commit rate (such as <2,000 commits/day) should be converted first, and those which are faster moving (such as >2,000 commits/day) should be converted last
+- Whether optimize jobs exist on a table
+  - These should be canceled before conversion, since UC managed tables will take care of running optimizations automatically for you (not canceling may lead to conflicts).
+- \# of files
+  - Tables with appropriately sized files (not too many small files) are ideal to convert first.
+- Multiple Cloud Regions
+  - If the default managed location of your Unity Catalog metastore, catalog, or schema is in a different cloud region from the storage location of the external table being converted, you may incur additional cross-region data transfer costs.
 
 ## Project Support
 
