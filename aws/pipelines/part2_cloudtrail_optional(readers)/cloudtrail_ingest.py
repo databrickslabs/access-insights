@@ -9,6 +9,7 @@ schema_hints = """Records.element.requestParameters map<string, string>,
                      Records.element.userIdentity.sessionContext.webIdFederationData struct<federatedProvider:string, attributes:map<string,string>>"""
  
 ingest_path = spark.conf.get("ingestPath")
+start_date = spark.conf.get("startDate")
  
 options = {
     "cloudFiles.format": "json",
@@ -48,7 +49,7 @@ def cloudtrail_logs():
             #col('_metadata.file_path').alias('filename'), 
             to_date('record.eventTime').alias('eventDate')
           )
-          .filter(col("eventDate") >= "2025-04-28")
+          .filter(col("eventDate") >= start_date)
           .filter(col("record.eventSource").isin("sts.amazonaws.com", "s3.amazonaws.com"))
           .filter(col("record.eventName").isin("AssumeRole", "GetObject", "PutObject", "DeleteObject", "ListObjects"))
   )
