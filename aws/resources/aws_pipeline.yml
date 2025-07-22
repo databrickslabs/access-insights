@@ -1,11 +1,10 @@
 resources:
   pipelines:
-    aws_slog_pipeline:
-      name: aws_slog_pipeline
+    access_insights_pipeline:
+      name: access_insights_pipeline
       catalog: access_insights
       schema: default
-      configuration:
-        bundle.sourcePath: ${workspace.file_path}/aws
+      configuration: ${var.pipeline_configuration}
       clusters:
         - label: default
           autoscale:
@@ -18,4 +17,4 @@ resources:
       channel: PREVIEW
       libraries:
         - file:
-            path: ../pipelines/cloudtrail_raw_storage_logs_pipeline.py #
+            path: ../pipelines/**
