@@ -1,0 +1,1215 @@
+{
+  "datasets": [
+    {
+      "name": "8c7fb07c",
+      "displayName": "Main Insights",
+      "queryLines": [
+        "with system_table_view as (\n",
+        "  select\n",
+        "    table_catalog,\n",
+        "    table_schema,\n",
+        "    table_name,\n",
+        "    full_namespace,\n",
+        "    table_type,\n",
+        "    round(table_details.size_in_bytes / (1024*1024), 2) `MB`,\n",
+        "    data_source_format,\n",
+        "    coalesce(internal_reads, 0) as internal_reads,\n",
+        "    case\n",
+        "      when\n",
+        "        size(filter(history, x -> x LIKE '%Databricks-Runtime%')) > 0\n",
+        "      then\n",
+        "        size(filter(history, x -> x LIKE '%Databricks-Runtime%'))\n",
+        "      else 0\n",
+        "    end AS internal_writes,\n",
+        "    coalesce(external_reads, 0) as external_reads,\n",
+        "    coalesce(\n",
+        "      external_writes,\n",
+        "      case\n",
+        "        when\n",
+        "          size(array_except(history, array('Databricks-Runtime'))) > 0\n",
+        "        then\n",
+        "          size(array_except(history, array('Databricks-Runtime')))\n",
+        "        else 0\n",
+        "      end\n",
+        "    ) external_writes,\n",
+        "    storage_path\n",
+        "  from\n",
+        "    access_insights.default.all_table_details\n",
+        "  order by\n",
+        "    table_catalog,\n",
+        "    table_schema,\n",
+        "    table_name\n",
+        ")\n",
+        "\n",
+        "select\n",
+        "  case\n",
+        "    when\n",
+        "      external_reads > 0\n",
+        "      and external_writes > 0\n",
+        "    then\n",
+        "      'Non-Databricks Readers + Writers'\n",
+        "    when external_reads > 0 then 'Non-Databricks Readers'\n",
+        "    when external_writes > 0 then 'Non-Databricks Writers'\n",
+        "    when\n",
+        "      internal_reads > 0\n",
+        "      and internal_writes > 0\n",
+        "    then\n",
+        "      'Databricks Readers + Writers'\n",
+        "    when internal_reads > 0 then 'Databricks Readers'\n",
+        "    when internal_writes > 0 then 'Databricks Writers'\n",
+        "    else 'unknown'\n",
+        "  end as `Classification`,\n",
+        "  *\n",
+        "from\n",
+        "  system_table_view stv"
+      ]
+    },
+    {
+      "name": "b3a39abb",
+      "displayName": "Main Insights w/ Cloudtrail",
+      "queryLines": [
+        "with system_table_view as (\n",
+        "  select\n",
+        "    table_catalog,\n",
+        "    table_schema,\n",
+        "    table_name,\n",
+        "    full_namespace,\n",
+        "    table_type,\n",
+        "    round(table_details.size_in_bytes / (1024 * 1024), 2) as MB,\n",
+        "    data_source_format,\n",
+        "    requestID,\n",
+        "    userAgent,\n",
+        "    userIdentity,\n",
+        "    requestParameters['roleArn'] as roleArn,\n",
+        "    sum(coalesce(reads, 0)) as reads,\n",
+        "    sum(coalesce(writes, 0)) as writes\n",
+        "  from\n",
+        "    access_insights.default.all_tables_joined_with_cloud_trail_grouped g \n",
+        "    left join \n",
+        "    access_insights.default.role_arn_credentials on requestParameters['roleArn'] = role_arn\n",
+        "  group by\n",
+        "    table_catalog,\n",
+        "    table_schema,\n",
+        "    table_name,\n",
+        "    full_namespace,\n",
+        "    table_type,\n",
+        "    table_details.size_in_bytes,\n",
+        "    data_source_format,\n",
+        "    requestID,\n",
+        "    userAgent,\n",
+        "    userIdentity,\n",
+        "    requestParameters['roleArn'],\n",
+        "    g.userAgent\n",
+        "  order by\n",
+        "    table_catalog,\n",
+        "    table_schema,\n",
+        "    table_name\n",
+        ")\n",
+        "select \n",
+        "  CASE\n",
+        "    when roleArn IS not null then 'databricks'\n",
+        "      else 'external'\n",
+        "    end as source_system,\n",
+        "  CASE\n",
+        "    WHEN\n",
+        "      source_system = 'databricks'\n",
+        "      and sum(reads) > 0\n",
+        "      and sum(writes) > 0\n",
+        "    then\n",
+        "      'Databricks Readers + Writers'\n",
+        "    WHEN\n",
+        "      source_system = 'databricks'\n",
+        "      and sum(reads) > 0\n",
+        "      and sum(writes) = 0\n",
+        "    then\n",
+        "      'Databricks Readers'\n",
+        "    WHEN\n",
+        "      source_system = 'databricks'\n",
+        "      and sum(reads) = 0\n",
+        "      and sum(writes) > 0\n",
+        "    then\n",
+        "      'Databricks Writers'\n",
+        "    WHEN\n",
+        "      source_system = 'databricks'\n",
+        "      and sum(reads) = 0\n",
+        "      and sum(writes) = 0\n",
+        "    then\n",
+        "      'Databricks Writers'\n",
+        "    WHEN\n",
+        "      source_system = 'external'\n",
+        "      and sum(reads) > 0\n",
+        "      and sum(writes) > 0\n",
+        "    then\n",
+        "      'Non-Databricks Readers + Writers'\n",
+        "    WHEN\n",
+        "      source_system = 'external'\n",
+        "      and sum(reads) > 0\n",
+        "      and sum(writes) = 0\n",
+        "    then\n",
+        "      'Non-Databricks Readers'\n",
+        "    WHEN\n",
+        "      source_system = 'external'\n",
+        "      and sum(reads) = 0\n",
+        "      and sum(writes) > 0\n",
+        "    then\n",
+        "      'Non-Databricks Writers'\n",
+        "    WHEN\n",
+        "      source_system = 'external'\n",
+        "      and sum(reads) = 0\n",
+        "      and sum(writes) = 0\n",
+        "    then\n",
+        "      'Non-Databricks'\n",
+        "    ELSE 'other'\n",
+        "  END AS classification,\n",
+        "  table_catalog,\n",
+        "  table_schema,\n",
+        "  table_name,\n",
+        "  full_namespace,\n",
+        "  table_type,\n",
+        "  MB,\n",
+        "  data_source_format,\n",
+        "  roleArn,\n",
+        "  sum(reads) as total_reads,\n",
+        "  sum(writes) as total_writes\n",
+        "from\n",
+        "  system_table_view stv\n",
+        "group by\n",
+        "  source_system,\n",
+        "  table_catalog,\n",
+        "  table_schema,\n",
+        "  table_name,\n",
+        "  full_namespace,\n",
+        "  table_type,\n",
+        "  MB,\n",
+        "  roleArn,\n",
+        "  data_source_format"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "251910d6",
+      "displayName": "External Table Overview",
+      "layout": [
+        {
+          "widget": {
+            "name": "c7fe6cc5",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "b3a39abb",
+                  "fields": [
+                    {
+                      "name": "source_system",
+                      "expression": "`source_system`"
+                    },
+                    {
+                      "name": "classification",
+                      "expression": "`classification`"
+                    },
+                    {
+                      "name": "table_catalog",
+                      "expression": "`table_catalog`"
+                    },
+                    {
+                      "name": "table_schema",
+                      "expression": "`table_schema`"
+                    },
+                    {
+                      "name": "table_name",
+                      "expression": "`table_name`"
+                    },
+                    {
+                      "name": "MB",
+                      "expression": "`MB`"
+                    },
+                    {
+                      "name": "full_namespace",
+                      "expression": "`full_namespace`"
+                    },
+                    {
+                      "name": "table_type",
+                      "expression": "`table_type`"
+                    },
+                    {
+                      "name": "data_source_format",
+                      "expression": "`data_source_format`"
+                    },
+                    {
+                      "name": "total_reads",
+                      "expression": "`total_reads`"
+                    },
+                    {
+                      "name": "total_writes",
+                      "expression": "`total_writes`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "source_system",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 0,
+                    "title": "source_system",
+                    "allowSearch": false,
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "source_system"
+                  },
+                  {
+                    "fieldName": "classification",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 2,
+                    "title": "classification",
+                    "allowSearch": false,
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "classification"
+                  },
+                  {
+                    "fieldName": "table_catalog",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 3,
+                    "title": "table_catalog",
+                    "allowSearch": false,
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "table_catalog"
+                  },
+                  {
+                    "fieldName": "table_schema",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 4,
+                    "title": "table_schema",
+                    "allowSearch": false,
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "table_schema"
+                  },
+                  {
+                    "fieldName": "table_name",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 5,
+                    "title": "table_name",
+                    "allowSearch": false,
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "table_name"
+                  },
+                  {
+                    "fieldName": "MB",
+                    "numberFormat": "0.00",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "float",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 6,
+                    "title": "MB",
+                    "allowSearch": false,
+                    "alignContent": "right",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "MB"
+                  },
+                  {
+                    "fieldName": "full_namespace",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 7,
+                    "title": "full_namespace",
+                    "allowSearch": false,
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "full_namespace"
+                  },
+                  {
+                    "fieldName": "table_type",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 8,
+                    "title": "table_type",
+                    "allowSearch": false,
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "table_type"
+                  },
+                  {
+                    "fieldName": "data_source_format",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 9,
+                    "title": "data_source_format",
+                    "allowSearch": false,
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "data_source_format"
+                  },
+                  {
+                    "fieldName": "total_reads",
+                    "numberFormat": "0",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 10,
+                    "title": "total_reads",
+                    "allowSearch": false,
+                    "alignContent": "right",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "total_reads"
+                  },
+                  {
+                    "fieldName": "total_writes",
+                    "numberFormat": "0",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "integer",
+                    "displayAs": "number",
+                    "visible": true,
+                    "order": 11,
+                    "title": "total_writes",
+                    "allowSearch": false,
+                    "alignContent": "right",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "total_writes"
+                  }
+                ]
+              },
+              "invisibleColumns": [
+                {
+                  "booleanValues": [
+                    "false",
+                    "true"
+                  ],
+                  "imageUrlTemplate": "{{ @ }}",
+                  "imageTitleTemplate": "{{ @ }}",
+                  "imageWidth": "",
+                  "imageHeight": "",
+                  "linkUrlTemplate": "{{ @ }}",
+                  "linkTextTemplate": "{{ @ }}",
+                  "linkTitleTemplate": "{{ @ }}",
+                  "linkOpenInNewTab": true,
+                  "name": "roleArn",
+                  "type": "string",
+                  "displayAs": "string",
+                  "order": 1,
+                  "title": "roleArn",
+                  "allowSearch": false,
+                  "alignContent": "left",
+                  "allowHTML": false,
+                  "highlightLinks": false,
+                  "useMonospaceFont": false,
+                  "preserveWhitespace": false
+                }
+              ],
+              "allowHTMLByDefault": false,
+              "itemsPerPage": 25,
+              "paginationSize": "default",
+              "condensed": true,
+              "withRowNumber": false,
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Table Breakdown",
+                "description": "Information Schema"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "827d0c41",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Table Migration Breakdown\n",
+                "\n",
+                "This dashboard provides a high-level overview of registered and unregistered tables and how they are being accessed. External tables that are exclusively read and updated via Databricks Unity Catalog (UC) are ideal candidates for conversion to 'managed’ tables. However, tables with external readers and writers require further investigation before being moved to ensure that other business processes are not disrupted.\n",
+                "\n",
+                "Tables with the name 'foreign' are those for which a specific registered table namespace could not be identified. This can happen due to pipeline authorization issues on a storage account or the underlying table being only available in the storage account."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "2696b149",
+            "queries": [
+              {
+                "name": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061b861ae18efab4135e24760fcc9_table_catalog",
+                "query": {
+                  "datasetName": "8c7fb07c",
+                  "fields": [
+                    {
+                      "name": "table_catalog",
+                      "expression": "`table_catalog`"
+                    },
+                    {
+                      "name": "table_catalog_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061c90ec419c29f0359562394bbe6_table_catalog",
+                "query": {
+                  "datasetName": "b3a39abb",
+                  "fields": [
+                    {
+                      "name": "table_catalog",
+                      "expression": "`table_catalog`"
+                    },
+                    {
+                      "name": "table_catalog_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "table_catalog",
+                    "displayName": "table_catalog",
+                    "queryName": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061b861ae18efab4135e24760fcc9_table_catalog"
+                  },
+                  {
+                    "fieldName": "table_catalog",
+                    "displayName": "table_catalog",
+                    "queryName": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061c90ec419c29f0359562394bbe6_table_catalog"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Catalog"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "d3049911",
+            "queries": [
+              {
+                "name": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061b861ae18efab4135e24760fcc9_table_schema",
+                "query": {
+                  "datasetName": "8c7fb07c",
+                  "fields": [
+                    {
+                      "name": "table_schema",
+                      "expression": "`table_schema`"
+                    },
+                    {
+                      "name": "table_schema_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061c90ec419c29f0359562394bbe6_table_schema",
+                "query": {
+                  "datasetName": "b3a39abb",
+                  "fields": [
+                    {
+                      "name": "table_schema",
+                      "expression": "`table_schema`"
+                    },
+                    {
+                      "name": "table_schema_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "table_schema",
+                    "displayName": "table_schema",
+                    "queryName": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061b861ae18efab4135e24760fcc9_table_schema"
+                  },
+                  {
+                    "fieldName": "table_schema",
+                    "displayName": "table_schema",
+                    "queryName": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061c90ec419c29f0359562394bbe6_table_schema"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Schema"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 4,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "712de27d",
+            "queries": [
+              {
+                "name": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061b861ae18efab4135e24760fcc9_table_name",
+                "query": {
+                  "datasetName": "8c7fb07c",
+                  "fields": [
+                    {
+                      "name": "table_name",
+                      "expression": "`table_name`"
+                    },
+                    {
+                      "name": "table_name_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061c90ec419c29f0359562394bbe6_Classification",
+                "query": {
+                  "datasetName": "b3a39abb",
+                  "fields": [
+                    {
+                      "name": "Classification",
+                      "expression": "`Classification`"
+                    },
+                    {
+                      "name": "Classification_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "table_name",
+                    "displayName": "table_name",
+                    "queryName": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061b861ae18efab4135e24760fcc9_table_name"
+                  },
+                  {
+                    "fieldName": "Classification",
+                    "displayName": "Classification",
+                    "queryName": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061c90ec419c29f0359562394bbe6_Classification"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Table"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 4,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "d0d5df18",
+            "queries": [
+              {
+                "name": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061b861ae18efab4135e24760fcc9_table_type",
+                "query": {
+                  "datasetName": "8c7fb07c",
+                  "fields": [
+                    {
+                      "name": "table_type",
+                      "expression": "`table_type`"
+                    },
+                    {
+                      "name": "table_type_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061c90ec419c29f0359562394bbe6_table_type",
+                "query": {
+                  "datasetName": "b3a39abb",
+                  "fields": [
+                    {
+                      "name": "table_type",
+                      "expression": "`table_type`"
+                    },
+                    {
+                      "name": "table_type_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "table_type",
+                    "displayName": "table_type",
+                    "queryName": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061b861ae18efab4135e24760fcc9_table_type"
+                  },
+                  {
+                    "fieldName": "table_type",
+                    "displayName": "table_type",
+                    "queryName": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061c90ec419c29f0359562394bbe6_table_type"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Table Type"
+              },
+              "selection": {
+                "defaultSelection": {
+                  "values": {
+                    "dataType": "STRING",
+                    "values": [
+                      {
+                        "value": "EXTERNAL"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "9bdf0b42",
+            "queries": [
+              {
+                "name": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061b861ae18efab4135e24760fcc9_data_source_format",
+                "query": {
+                  "datasetName": "8c7fb07c",
+                  "fields": [
+                    {
+                      "name": "data_source_format",
+                      "expression": "`data_source_format`"
+                    },
+                    {
+                      "name": "data_source_format_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061c90ec419c29f0359562394bbe6_data_source_format",
+                "query": {
+                  "datasetName": "b3a39abb",
+                  "fields": [
+                    {
+                      "name": "data_source_format",
+                      "expression": "`data_source_format`"
+                    },
+                    {
+                      "name": "data_source_format_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "data_source_format",
+                    "displayName": "data_source_format",
+                    "queryName": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061b861ae18efab4135e24760fcc9_data_source_format"
+                  },
+                  {
+                    "fieldName": "data_source_format",
+                    "displayName": "data_source_format",
+                    "queryName": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061c90ec419c29f0359562394bbe6_data_source_format"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Table Format"
+              },
+              "selection": {
+                "defaultSelection": {
+                  "values": {
+                    "dataType": "STRING",
+                    "values": [
+                      {
+                        "value": "DELTA"
+                      },
+                      {
+                        "value": "DELTA_UNIFORM_ICEBERG"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 5,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "f999a111",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8c7fb07c",
+                  "fields": [
+                    {
+                      "name": "count(*)",
+                      "expression": "COUNT(`*`)"
+                    },
+                    {
+                      "name": "table_type",
+                      "expression": "`table_type`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "count(*)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Count of Records"
+                },
+                "y": {
+                  "fieldName": "table_type",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "table_type"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "External vs Managed"
+              },
+              "annotations": [
+                {
+                  "type": "vertical-line",
+                  "encodings": {
+                    "x": {
+                      "dataValue": "34000",
+                      "dataType": "INTEGER"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 16,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "dc34e1b6",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8c7fb07c",
+                  "fields": [
+                    {
+                      "name": "table_type",
+                      "expression": "`table_type`"
+                    },
+                    {
+                      "name": "count(full_namespace)",
+                      "expression": "COUNT(`full_namespace`)"
+                    },
+                    {
+                      "name": "table_catalog",
+                      "expression": "`table_catalog`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "count(full_namespace)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Count of full_namespace"
+                },
+                "y": {
+                  "fieldName": "table_catalog",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "table_catalog"
+                },
+                "color": {
+                  "fieldName": "table_type",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Table Type"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "title": "Table Type by Catalog",
+                "showTitle": true
+              },
+              "mark": {
+                "layout": "stack"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 16,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "7e9a6a60",
+            "queries": [
+              {
+                "name": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061b861ae18efab4135e24760fcc9_Classification",
+                "query": {
+                  "datasetName": "8c7fb07c",
+                  "fields": [
+                    {
+                      "name": "Classification",
+                      "expression": "`Classification`"
+                    },
+                    {
+                      "name": "Classification_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061c90ec419c29f0359562394bbe6_classification",
+                "query": {
+                  "datasetName": "b3a39abb",
+                  "fields": [
+                    {
+                      "name": "classification",
+                      "expression": "`classification`"
+                    },
+                    {
+                      "name": "classification_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "Classification",
+                    "displayName": "Classification",
+                    "queryName": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061b861ae18efab4135e24760fcc9_Classification"
+                  },
+                  {
+                    "fieldName": "classification",
+                    "displayName": "classification",
+                    "queryName": "dashboards/01f061b85677147185a7765b8c38a641/datasets/01f061c90ec419c29f0359562394bbe6_classification"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Classification"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 5,
+            "width": 2,
+            "height": 1
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    }
+  }
+}
