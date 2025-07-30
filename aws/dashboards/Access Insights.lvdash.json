@@ -184,6 +184,57 @@
         "  roleArn,\n",
         "  data_source_format"
       ]
+    },
+    {
+      "name": "209e4d16",
+      "displayName": "Recent UnityCatalog Access Audit Insights",
+      "queryLines": [
+        "WITH external_tables AS (\n",
+        "  SELECT \n",
+        "    table_catalog, \n",
+        "    table_schema, \n",
+        "    table_name, \n",
+        "    storage_path\n",
+        "  FROM \n",
+        "    system.information_schema.tables\n",
+        "  WHERE \n",
+        "    table_type = 'EXTERNAL'\n",
+        "),\n",
+        "\n",
+        "audit_events AS (\n",
+        "  SELECT\n",
+        "    event_time,\n",
+        "    user_identity.email AS user,\n",
+        "    action_name,\n",
+        "    COALESCE(request_params['table_url'], request_params['url']) AS path_accessed,\n",
+        "    request_params,\n",
+        "    response\n",
+        "  FROM\n",
+        "    system.access.audit\n",
+        "  WHERE\n",
+        "    service_name = 'unityCatalog'\n",
+        "    AND action_name IN (\n",
+        "      'generateTemporaryTableCredential',\n",
+        "      'generateTemporaryPathCredential',\n",
+        "      'checkPathAccess'\n",
+        "    )\n",
+        "    AND event_date BETWEEN current_date() - interval 30 day AND current_date()\n",
+        ")\n",
+        "\n",
+        "SELECT \n",
+        "  t.table_name,\n",
+        "  ARRAY_AGG(DISTINCT a.action_name) AS action_names\n",
+        "FROM \n",
+        "  audit_events a\n",
+        "JOIN \n",
+        "  external_tables t\n",
+        "ON \n",
+        "  a.path_accessed = t.storage_path\n",
+        "GROUP BY \n",
+        "  t.table_name\n",
+        "ORDER BY \n",
+        "  t.table_name"
+      ]
     }
   ],
   "pages": [
@@ -1201,6 +1252,110 @@
             "y": 5,
             "width": 2,
             "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "0b33eb3b",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "209e4d16",
+                  "fields": [
+                    {
+                      "name": "table_name",
+                      "expression": "`table_name`"
+                    },
+                    {
+                      "name": "action_names",
+                      "expression": "`action_names`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "table_name",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "string",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100000,
+                    "title": "table_name",
+                    "allowSearch": false,
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "table_name"
+                  },
+                  {
+                    "fieldName": "action_names",
+                    "booleanValues": [
+                      "false",
+                      "true"
+                    ],
+                    "imageUrlTemplate": "{{ @ }}",
+                    "imageTitleTemplate": "{{ @ }}",
+                    "imageWidth": "",
+                    "imageHeight": "",
+                    "linkUrlTemplate": "{{ @ }}",
+                    "linkTextTemplate": "{{ @ }}",
+                    "linkTitleTemplate": "{{ @ }}",
+                    "linkOpenInNewTab": true,
+                    "type": "complex",
+                    "displayAs": "string",
+                    "visible": true,
+                    "order": 100001,
+                    "title": "action_names",
+                    "allowSearch": false,
+                    "alignContent": "left",
+                    "allowHTML": false,
+                    "highlightLinks": false,
+                    "useMonospaceFont": false,
+                    "preserveWhitespace": false,
+                    "displayName": "action_names"
+                  }
+                ]
+              },
+              "invisibleColumns": [],
+              "allowHTMLByDefault": false,
+              "itemsPerPage": 25,
+              "paginationSize": "default",
+              "condensed": true,
+              "withRowNumber": false,
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Table Breakdown",
+                "description": "Information Schema"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 22,
+            "width": 6,
+            "height": 10
           }
         }
       ],

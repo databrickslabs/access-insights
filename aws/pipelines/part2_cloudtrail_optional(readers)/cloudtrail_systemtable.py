@@ -18,23 +18,6 @@ credentials_schema = StructType([
     StructField("accessKeyId", StringType(), True)
 ])
 
-@dlt.view
-def information_schema():
-    return (spark.read.table("system.information_schema.tables")
-            .filter((col("table_catalog") != "system") & col("storage_path").isNotNull())
-            .select(
-                col("table_catalog"),
-                col("table_schema"),
-                col("table_name"),
-                col("table_type"),
-                col("table_owner"),
-                col("last_altered_by"),
-                col("data_source_format"),
-                col("storage_sub_directory"),
-                col("storage_path"),
-                concat(col("table_catalog"), lit("."), col("table_schema"), lit("."), col("table_name")).alias("full_table_name"),
-                regexp_extract(col("storage_path"), pattern, 1).alias("bucket")
-            ))
 
 @dlt.view
 def cloudtrail_logs_with_storagepath():
@@ -125,7 +108,7 @@ def all_tables_joined_with_cloud_trail_grouped():
 
     return grouped_df
 
-url = "https://e2-demo-field-eng.cloud.databricks.com/api/2.1/unity-catalog/credentials"
+url = spark.conf.get("datbricksUrl")
 headers = {"Authorization": f"Bearer {dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()}"}
 response = requests.get(url, headers=headers)
 data = response.json().get("credentials", [])
