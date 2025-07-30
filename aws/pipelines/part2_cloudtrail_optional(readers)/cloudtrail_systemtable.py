@@ -108,7 +108,7 @@ def all_tables_joined_with_cloud_trail_grouped():
 
     return grouped_df
 
-url = "https://e2-demo-field-eng.cloud.databricks.com/api/2.1/unity-catalog/credentials"
+url = spark.conf.get("datbricksUrl")
 headers = {"Authorization": f"Bearer {dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()}"}
 response = requests.get(url, headers=headers)
 data = response.json().get("credentials", [])
