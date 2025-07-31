@@ -71,23 +71,27 @@ bundle will deploy the following assets.
     - `Non-Databricks Readers + Writers`: Table(s) that may be a blend of Databricks + External read and write events that will be classified as external, i.e. having external tools that read/write to the table(s) not using Unity Catalog
 
   ![Access Insights Dashboard](/imgs/dashboard_sample.png)
-Azure Dashboard - Feedback
-Let’s make sure we are not showing storage paths for UC managed tables - we do not want to expose this information to customers
-What are these fields and do we really need them or can we hide them? 
-Subscription ID 
-Resource Group 
-What is the field “Table” in the dropdown menu? Can we be more descriptive? 
-We should field out tables that are bad candidates for conversion, by default, but also allow customers to “open up” these filters (perhaps with subtitle description text for the table)
-“Count of Distinct User Agents”
-Unclear what this means. Should we remove this? Should we show “Count of distinct tables”, and “# of UC external tables” instead, perhaps?
-For total external vs. managed, do we want to show a pie chart instead of a bar chart?
+## Estimating Reader and Writer Downtime
+Exact downtime for readers and writers during conversion from UC external tables to UC managed tables can be estimated as follows:
+Table Size
+Recommended Cluster Size
+Time for Data Copy 
+Reader*/Writer Downtime
+100 GB or less
+32-core / DBSQL small
+~6min or less
+~1-2min or less
+1 TB
+64-core / DBSQL medium
+~30 min
+~1-2min 
+10 TB
+256-core / DBSQL x-large
+~1.5 hrs
+~1-5min
 
-AWS Dashboard - Feedback
+Project Support
+Please note that all projects in the /databrickslabs github account are provided for your exploration only, and are not formally supported by Databricks with Service Level Agreements (SLAs). They are provided AS-IS and we do not make any guarantees of any kind. Please do not submit a support ticket relating to any issues arising from the use of these projects.
+Any issues discovered through the use of this project should be filed as GitHub Issues on the Repo. We do welcome your feedback. These GitHub issues will be reviewed as time permits, but there are no formal SLAs for support.
 
-
-
-Roberto Salciado’s Dashboard - Feedback
-Let’s roll in Roberto Salciado’s system tables method (as a first option to try)
-Let’s combine the different attributes we have in our dashboard vs. Roberto’s
-Across the board, we’ll have to make sure to include notes (such as in subheader titles in the dashboard) to clarify which fields may not be 100% accurate as a disclaimer, so that customers know!)
   
