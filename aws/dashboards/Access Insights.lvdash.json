@@ -214,7 +214,6 @@
         "  WHERE\n",
         "    service_name = 'unityCatalog'\n",
         "    AND action_name IN (\n",
-        "      'generateTemporaryTableCredential',\n",
         "      'generateTemporaryPathCredential',\n",
         "      'checkPathAccess'\n",
         "    )\n",

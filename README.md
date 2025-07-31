@@ -1,3 +1,4 @@
+%markdown
 # Access Insights
 
 This Access Insights dashboard gathers details about a customers’ tables, for example by showing which readers and writers are accessing these tables (using storage logs). 
@@ -29,10 +30,23 @@ The following information may be useful when analyzing or converting UC external
   - Tables with a lower commit rate (such as <2,000 commits/day) should be converted first, and those which are faster moving (such as >2,000 commits/day) should be converted last
 - Whether optimize jobs exist on a table
   - These should be canceled before conversion, since UC managed tables will take care of running optimizations automatically for you (not canceling may lead to conflicts).
+- \#DBR versions 
+  - While conversion will work with any DBR version, readers/writers DBR 15.4+ will be able to time travel to historical commits made prior to conversion. 
+  
 - \# of files
   - Tables with appropriately sized files (not too many small files) are ideal to convert first.
 - Multiple Cloud Regions
   - If the default managed location of your Unity Catalog metastore, catalog, or schema is in a different cloud region from the storage location of the external table being converted, you may incur additional cross-region data transfer costs.
+
+## Estimating Reader and Writer Downtime
+Exact downtime for readers and writers during conversion from UC external tables to UC managed tables can be estimated as follows:
+
+
+| Table Size | Compute Resources | Query Duration | Optimization Duration |
+|------------|-------------------|----------------|-----------------------|
+| 100 GB or less | 32-core / DBSQL small | ~6 min or less | ~1-2 min or less |
+| 1 TB | 64-core / DBSQL medium | ~30 min | ~1-2 min |
+| 10 TB | 256-core / DBSQL x-large | ~1.5 hrs | ~1-5 min |
 
 ## Project Support
 
