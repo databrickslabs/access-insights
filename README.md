@@ -85,27 +85,3 @@ bundle will deploy the following assets.
     - `Non-Databricks Readers + Writers`: Table(s) that may be a blend of Databricks + External read and write events that will be classified as external, i.e. having external tools that read/write to the table(s) not using Unity Catalog
 
   ![Access Insights Dashboard](/imgs/dashboard_sample.png)
-## Estimating Reader and Writer Downtime
-Exact downtime for readers and writers during conversion from UC external tables to UC managed tables can be estimated as follows:
-Table Size
-Recommended Cluster Size
-Time for Data Copy 
-Reader*/Writer Downtime
-100 GB or less
-32-core / DBSQL small
-~6min or less
-~1-2min or less
-1 TB
-64-core / DBSQL medium
-~30 min
-~1-2min 
-10 TB
-256-core / DBSQL x-large
-~1.5 hrs
-~1-5min
-
-Project Support
-Please note that all projects in the /databrickslabs github account are provided for your exploration only, and are not formally supported by Databricks with Service Level Agreements (SLAs). They are provided AS-IS and we do not make any guarantees of any kind. Please do not submit a support ticket relating to any issues arising from the use of these projects.
-Any issues discovered through the use of this project should be filed as GitHub Issues on the Repo. We do welcome your feedback. These GitHub issues will be reviewed as time permits, but there are no formal SLAs for support.
-
-  
