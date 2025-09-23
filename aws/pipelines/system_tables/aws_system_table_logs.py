@@ -1,7 +1,6 @@
 import dlt
 
 import sys
-
 from pyspark.dbutils import DBUtils
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
@@ -19,8 +18,8 @@ from utilities.utils import (
 
 dbutils = DBUtils(spark)
 
-@dlt.table(name="all_table_details")
-def all_table_details():
+@dlt.table(name="system_all_table_details")
+def system_all_table_details():
     df_info = spark.read.table("system.information_schema.tables").select(
         F.col("table_catalog"),
         F.col("table_schema"),
@@ -57,6 +56,4 @@ def all_table_details():
         )
     )
 
-    df = collect_table_details(spark=spark, df=df, schema=table_details_schema)
-
-    return df
+    return collect_table_details(spark=spark, df=df, schema=table_details_schema)
