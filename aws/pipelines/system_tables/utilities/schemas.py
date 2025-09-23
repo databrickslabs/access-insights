@@ -44,9 +44,15 @@ table_details_schema = StructType(
         ),
         StructField("history", ArrayType(StringType(), True), True),
         StructField("status", StringType(), True),
+        StructField("reads", StringType(), True),
+        StructField("writes", StringType(), True),
         StructField("internal_reads", LongType(), True),
         StructField("internal_writes", LongType(), True),
         StructField("external_reads", LongType(), True),
         StructField("external_writes", LongType(), True),
+        # StructField("requestID", StringType(), True),
+        # StructField("userAgent", StringType(), True),
+        # StructField("userIdentity", StructType(), True),
+        # StructField("requestParameters", MapType(StringType(), StringType(), True), True,),
     ]
 )
