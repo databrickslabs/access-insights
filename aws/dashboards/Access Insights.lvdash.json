@@ -1365,7 +1365,7 @@
               "frame": {
                 "showTitle": true,
                 "showDescription": true,
-                "title": "Historical View of Classification",
+                "title": "Historical View of Table Type",
                 "description": "Each time the pipeline is run, the processed date is used to capture progress of moving to managed.  "
               }
             }
