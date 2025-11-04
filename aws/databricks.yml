@@ -12,6 +12,11 @@ variables:
     type: complex 
     default:
       bundle.sourcePath: ${workspace.file_path}
+      ingestPath: < ingest path >
+      startDate: < start date >
+      datbricksUrl: < databricks url >
+      schemaLocation: < schema location >
+
 
 include:
   - resources/*.yml

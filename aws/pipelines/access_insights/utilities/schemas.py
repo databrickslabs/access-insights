@@ -6,10 +6,13 @@ from pyspark.sql.types import (
     MapType,
     ArrayType,
     BooleanType,
+    DateType
 )
 
 table_details_schema = StructType(
     [
+        StructField("processed_date", DateType(), True),
+        StructField("sourced_from_cloudlogs", BooleanType(), True),
         StructField("table_catalog", StringType(), True),
         StructField("table_schema", StringType(), True),
         StructField("table_name", StringType(), True),
@@ -44,8 +47,8 @@ table_details_schema = StructType(
         ),
         StructField("history", ArrayType(StringType(), True), True),
         StructField("status", StringType(), True),
-        StructField("reads", StringType(), True),
-        StructField("writes", StringType(), True),
+        StructField("reads", LongType(), True),
+        StructField("writes", LongType(), True),
         StructField("internal_reads", LongType(), True),
         StructField("internal_writes", LongType(), True),
         StructField("external_reads", LongType(), True),
