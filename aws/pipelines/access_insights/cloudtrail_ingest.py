@@ -13,11 +13,14 @@ if ingest_path !=None:
   
   ingest_path = spark.conf.get("ingestPath").strip()
   start_date = spark.conf.get("startDate")
+  schema_location = spark.conf.get("schemaLocation")
+
   options = {
       "cloudFiles.format": "json",
       "cloudFiles.inferColumnTypes": "true",
       "cloudFiles.schemaEvolutionMode": "addNewColumns",
-      "cloudFiles.schemaHints": schema_hints
+      "cloudFiles.schemaHints": schema_hints,
+      "cloudFiles.schemaLocation": schema_location
   }
 
   @dlt.view(

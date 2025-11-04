@@ -1,0 +1,10 @@
+[project]
+name = "access-insights"
+version = "0.1.0"
+description = "Access Insights"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "databricks-connect==15.4",
+    "databricks-dlt>=0.3.0",
+]
