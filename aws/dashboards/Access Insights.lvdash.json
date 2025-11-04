@@ -672,7 +672,7 @@
           },
           "position": {
             "x": 0,
-            "y": 6,
+            "y": 13,
             "width": 6,
             "height": 10
           }
@@ -794,16 +794,16 @@
             "name": "712de27d",
             "queries": [
               {
-                "name": "dashboards/01f0b8e53afe12f09ac7decfffb52baf/datasets/01f0b8e53afe1778998f20d1ad0c7b73_Classification",
+                "name": "dashboards/01f0b8e53afe12f09ac7decfffb52baf/datasets/01f0b8e53afe1778998f20d1ad0c7b73_classification",
                 "query": {
                   "datasetName": "b3a39abb",
                   "fields": [
                     {
-                      "name": "Classification",
-                      "expression": "`Classification`"
+                      "name": "classification",
+                      "expression": "`classification`"
                     },
                     {
-                      "name": "Classification_associativity",
+                      "name": "classification_associativity",
                       "expression": "COUNT_IF(`associative_filter_predicate_group`)"
                     }
                   ],
@@ -817,8 +817,8 @@
               "encodings": {
                 "fields": [
                   {
-                    "fieldName": "Classification",
-                    "queryName": "dashboards/01f0b8e53afe12f09ac7decfffb52baf/datasets/01f0b8e53afe1778998f20d1ad0c7b73_Classification"
+                    "fieldName": "classification",
+                    "queryName": "dashboards/01f0b8e53afe12f09ac7decfffb52baf/datasets/01f0b8e53afe1778998f20d1ad0c7b73_classification"
                   }
                 ]
               },
@@ -1017,7 +1017,7 @@
           },
           "position": {
             "x": 0,
-            "y": 16,
+            "y": 23,
             "width": 3,
             "height": 6
           }
@@ -1088,7 +1088,7 @@
           },
           "position": {
             "x": 3,
-            "y": 16,
+            "y": 23,
             "width": 3,
             "height": 6
           }
@@ -1238,9 +1238,143 @@
           },
           "position": {
             "x": 0,
-            "y": 22,
+            "y": 29,
             "width": 6,
             "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "historical-view-of-classification",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "b3a39abb",
+                  "fields": [
+                    {
+                      "name": "classification",
+                      "expression": "`classification`"
+                    },
+                    {
+                      "name": "daily(processed_date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `processed_date`)"
+                    },
+                    {
+                      "name": "count(*)",
+                      "expression": "COUNT(`*`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "daily(processed_date)",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "count(*)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "classification",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Historical View of Classification",
+                "description": "Each time the pipeline is run, the processed date is used to capture classifications over time.  "
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "e40ca2c4",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "b3a39abb",
+                  "fields": [
+                    {
+                      "name": "table_type",
+                      "expression": "`table_type`"
+                    },
+                    {
+                      "name": "daily(processed_date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `processed_date`)"
+                    },
+                    {
+                      "name": "count(*)",
+                      "expression": "COUNT(`*`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "daily(processed_date)",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "count(*)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "table_type",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Historical View of Classification",
+                "description": "Each time the pipeline is run, the processed date is used to capture progress of moving to managed.  "
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 6,
+            "width": 3,
+            "height": 7
           }
         }
       ],
