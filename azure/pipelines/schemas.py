@@ -6,10 +6,13 @@ from pyspark.sql.types import (
     MapType,
     ArrayType,
     BooleanType,
+    DateType
 )
 
 table_details_schema = StructType(
     [
+        StructField("processed_date", DateType(), True),
+        StructField("sourced_from_cloudlogs", LongType(), True),
         StructField("table_catalog", StringType(), True),
         StructField("table_schema", StringType(), True),
         StructField("table_name", StringType(), True),

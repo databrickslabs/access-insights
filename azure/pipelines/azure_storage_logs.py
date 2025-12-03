@@ -5,7 +5,7 @@ import sys
 from pyspark.dbutils import DBUtils
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
-
+from pyspark.sql.functions import lit
 spark = SparkSession.builder.getOrCreate()
 sys.path.append(spark.conf.get("bundle.sourcePath"))
 
@@ -29,263 +29,496 @@ secret_scope = spark.conf.get("secret-scope")
 eh_name = spark.conf.get("eh-name")
 eh_namespace = spark.conf.get("eh-namespace")
 client_id = spark.conf.get("client-id")
-client_secret = dbutils.secrets.get(secret_scope, spark.conf.get("client-secret"))
+processed_date = F.now()
+sourced_from_cloudlogs = 1 if eh_namespace != "None" and eh_namespace != "" else 0
+#client_secret = dbutils.secrets.get(secret_scope, spark.conf.get("client-secret"))
 tenant_id = spark.conf.get("tenant-id")
-
-sasl_config = f'kafkashaded.org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required clientId="{client_id}" clientSecret="{client_secret}" scope="https://{eh_namespace}/.default" ssl.protocol="SSL";'
-
-kafka_options = {
-    "kafka.bootstrap.servers": f"{eh_namespace}:9093",
-    "kafka.sasl.jaas.config": sasl_config,
-    "kafka.sasl.oauthbearer.token.endpoint.url": f"https://login.microsoft.com/{tenant_id}/oauth2/v2.0/token",
-    "kafka.security.protocol": "SASL_SSL",
-    "kafka.sasl.mechanism": "OAUTHBEARER",
-    "kafka.sasl.login.callback.handler.class": "kafkashaded.org.apache.kafka.common.security.oauthbearer.secured.OAuthBearerLoginCallbackHandler",
-    "subscribe": eh_name,
-    "startingOffsets": "earliest",
-    "failOnDataLoss": False,
-}
-
-
-# crawl all the tables in hive_metastore
-@dlt.table(name="hms_details")
-def gather_hms_details() -> DataFrame:
-    hms_catalog = "hive_metastore"
-    table_details: list[dict[str, str | None]] = []
-    filter_statement = (
-        (F.col("col_name") == "Catalog")
-        | (F.col("col_name") == "Database")
-        | (F.col("col_name") == "Table")
-        | (F.col("col_name") == "Type")
-        | (F.col("col_name") == "Provider")
-        | (F.col("col_name") == "Location")
-    )
-
-    dbs = spark.sql(f"SHOW SCHEMAS IN {hms_catalog}")
-
-    for db in dbs.collect():
-        tables = spark.sql(f"SHOW TABLES IN {hms_catalog}.{db.databaseName}")
-        for table in tables.collect():
-            if table.isTemporary:
-                continue
-
-            namespace = f"`{hms_catalog}`.`{table.database}`.`{table.tableName}`"
-            try:
-                tbl_metadata = spark.sql(f"DESCRIBE EXTENDED {namespace}").filter(
-                    filter_statement
-                )
-                tbl_metadata = (
-                    tbl_metadata.groupBy()
-                    .pivot("col_name")
-                    .agg({"data_type": "first"})
-                    .first()
-                )
-
-                table_details.append(
-                    {
-                        "catalog": tbl_metadata.Catalog,
-                        "database": tbl_metadata.Database,
-                        "name": tbl_metadata.Table,
-                        "table_format": tbl_metadata.Provider,
-                        "table_type": tbl_metadata.Type,
-                        "location_uri": tbl_metadata.Location,
-                        "status": None,
-                    }
-                )
-
-            except Exception as exc:
-                print(f"fail {namespace}")
-                table_details.append(
-                    {
-                        "catalog": hms_catalog,
-                        "database": table.database,
-                        "name": table.tableName,
-                        "table_format": None,
-                        "table_type": None,
-                        "location_uri": None,
-                        "status": str(exc),
-                    }
-                )
-
-    return spark.createDataFrame(data=table_details, schema=hms_table_schema)
+print(eh_namespace)
+#sasl_config = f'kafkashaded.org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required clientId="{client_id}" clientSecret="{client_secret}" scope="https://{eh_namespace}/.default" ssl.protocol="SSL";'
+if eh_namespace != "None":
+    kafka_options = {
+        "kafka.bootstrap.servers": f"{eh_namespace}:9093",
+        "kafka.sasl.jaas.config": sasl_config,
+        "kafka.sasl.oauthbearer.token.endpoint.url": f"https://login.microsoft.com/{tenant_id}/oauth2/v2.0/token",
+        "kafka.security.protocol": "SASL_SSL",
+        "kafka.sasl.mechanism": "OAUTHBEARER",
+        "kafka.sasl.login.callback.handler.class": "kafkashaded.org.apache.kafka.common.security.oauthbearer.secured.OAuthBearerLoginCallbackHandler",
+        "subscribe": eh_name,
+        "startingOffsets": "earliest",
+        "failOnDataLoss": False,
+    }
 
 
-@dlt.table
-def azure_storage_logs_raw() -> DataFrame:
-    df = spark.readStream.format("kafka").options(**kafka_options).load()
-    df = parse_eventhub_logs(df=df, schema=eventhub_logs_schema)
-    return df
-
-
-@dlt.table(name="all_table_details")
-def information_details():
-    df_info = spark.read.table("system.information_schema.tables").select(
-        F.col("table_catalog"),
-        F.col("table_schema"),
-        F.col("table_name"),
-        F.col("table_type"),
-        F.col("data_source_format"),
-        F.col("storage_path"),
-        F.lit(None).alias("status"),
-    )
-
-    df_hms = spark.read.table("hms_details").select(
-        F.col("catalog").alias("table_catalog"),
-        F.col("database").alias("table_schema"),
-        F.col("name").alias("table_name"),
-        F.col("table_type"),
-        F.upper(F.col("table_format")).alias("data_source_format"),
-        F.col("location_uri").alias("storage_path"),
-        F.col("status"),
-    )
-
-    df_table_details = df_info.unionByName(df_hms, allowMissingColumns=True)
-
-    df = df_table_details.select(
-        F.col("table_catalog"),
-        F.col("table_schema"),
-        F.col("table_name"),
-        F.concat_ws(
-            ".", F.col("table_catalog"), F.col("table_schema"), F.col("table_name")
-        ).alias("full_namespace"),
-        F.col("storage_path"),
-        F.coalesce(parse_storage_path(F.col("storage_path")), F.lit(None)).alias(
-            "parsed_path"
-        ),
-        F.col("table_type"),
-        F.col("data_source_format"),
-        F.col("status"),
-    )
-
-    df = df.where(
-        (~F.col("table_catalog").isin("system", "__databricks_internal"))
-        & (~F.col("table_name").like("__materialization%"))
-        & (
-            (F.col("table_type").isin("MANAGED", "EXTERNAL"))
-            | (F.col("table_type").isNull())
-        )
-        & (
-            (~F.col("data_source_format").isin("DELTASHARING"))
-            | (F.col("data_source_format").isNull())
-        )
-    )
-
-    df = collect_table_details(spark=spark, df=df, schema=table_details_schema)
-
-    return df
-
-
-@dlt.table
-def azure_application_details():
-    try:
-        df_creds = spark.read.table("system.information_schema.storage_credentials")
-
-        app_names: list[str] = (
-            df_creds.select(
-                F.collect_set(
-                    F.regexp_extract("credential", "accessConnectors/(.*?),mi_id", 1)
-                ).alias("access_connector_name")
-            )
-            .first()
-            .access_connector_name
+    # crawl all the tables in hive_metastore
+    @dlt.table(name="hms_details")
+    def gather_hms_details() -> DataFrame:
+        hms_catalog = "hive_metastore"
+        table_details: list[dict[str, str | None]] = []
+        filter_statement = (
+            (F.col("col_name") == "Catalog")
+            | (F.col("col_name") == "Database")
+            | (F.col("col_name") == "Table")
+            | (F.col("col_name") == "Type")
+            | (F.col("col_name") == "Provider")
+            | (F.col("col_name") == "Location")
         )
 
-        if app_names:
-            return azure_apps(
-                spark=spark,
-                tenant_id=tenant_id,
-                client_id=client_id,
-                client_secret=client_secret,
-                app_names=app_names,
-                schema=azure_apps_schema,
-            )
-        return spark.createDataFrame([], azure_apps_schema)
-    except Exception:
-        return spark.createDataFrame([], azure_apps_schema)
+        dbs = spark.sql(f"SHOW SCHEMAS IN {hms_catalog}")
+
+        for db in dbs.collect():
+            tables = spark.sql(f"SHOW TABLES IN {hms_catalog}.{db.databaseName}")
+            for table in tables.collect():
+                if table.isTemporary:
+                    continue
+
+                namespace = f"`{hms_catalog}`.`{table.database}`.`{table.tableName}`"
+                try:
+                    tbl_metadata = spark.sql(f"DESCRIBE EXTENDED {namespace}").filter(
+                        filter_statement
+                    )
+                    tbl_metadata = (
+                        tbl_metadata.groupBy()
+                        .pivot("col_name")
+                        .agg({"data_type": "first"})
+                        .first()
+                    )
+
+                    table_details.append(
+                        {
+                            "catalog": tbl_metadata.Catalog,
+                            "database": tbl_metadata.Database,
+                            "name": tbl_metadata.Table,
+                            "table_format": tbl_metadata.Provider,
+                            "table_type": tbl_metadata.Type,
+                            "location_uri": tbl_metadata.Location,
+                            "status": None,
+                        }
+                    )
+
+                except Exception as exc:
+                    print(f"fail {namespace}")
+                    table_details.append(
+                        {
+                            "catalog": hms_catalog,
+                            "database": table.database,
+                            "name": table.tableName,
+                            "table_format": None,
+                            "table_type": None,
+                            "location_uri": None,
+                            "status": str(exc),
+                        }
+                    )
+
+        return spark.createDataFrame(data=table_details, schema=hms_table_schema)
 
 
-@dlt.table
-def azure_storage_logs():
-    df_insights = spark.read.table("azure_storage_logs_raw").alias("insights")
-    df_info = spark.read.table("all_table_details").alias("info")
+    @dlt.table
+    def azure_storage_logs_raw() -> DataFrame:
+        df = spark.readStream.format("kafka").options(**kafka_options).load()
+        df = parse_eventhub_logs(df=df, schema=eventhub_logs_schema)
+        return df
 
-    df_join = df_insights.join(
-        df_info,
-        on=F.expr(
-            "insights.properties.objectKey LIKE CONCAT('%', info.parsed_path, '%') AND info.parsed_path != ''"
-        ),
-        how="left",
-    )
 
-    # Select and transform the required columns
-    df_result = df_join.select(
-        F.to_timestamp(F.col("insights.time")).alias("storage_time"),
-        F.split(F.col("insights.resourceId"), "/")[2].alias("subscription_id"),
-        F.split(F.col("insights.resourceId"), "/")[4].alias("resource_group"),
-        F.split(F.col("insights.resourceId"), "/")[8].alias("storage_account"),
-        F.coalesce(F.col("info.table_catalog"), F.lit("foreign")).alias(
-            "table_catalog"
-        ),
-        F.coalesce(F.col("info.table_schema"), F.lit("foreign")).alias("table_schema"),
-        F.coalesce(F.col("info.table_name"), F.lit("foreign")).alias("table_name"),
-        F.coalesce(F.col("info.full_namespace"), F.lit("foreign")).alias(
-            "full_namespace"
-        ),
-        F.col("info.table_details"),
-        F.col("info.status").alias("table_status"),
-        F.coalesce(
-            F.col("info.storage_path"),
-            F.concat(
-                F.lit("abfss://"),
-                F.regexp_extract(
-                    F.regexp_extract(
-                        F.col("insights.properties.objectKey"), "(.*)(/_delta_log)", 1
-                    ),
-                    "^/[^/]+/([^/]+)",
-                    1,
-                ),
-                F.lit("@"),
-                F.regexp_extract(
-                    F.regexp_extract(
-                        F.col("insights.properties.objectKey"), "(.*)(/_delta_log)", 1
-                    ),
-                    "^/([^/]+)",
-                    1,
-                ),
-                F.lit(".dfs.core.windows.net/"),
-                F.regexp_extract(
-                    F.regexp_extract(
-                        F.col("insights.properties.objectKey"), "(.*)(/_delta_log)", 1
-                    ),
-                    "^/[^/]+/[^/]+/(.*)",
-                    1,
-                ),
+    @dlt.table(name="all_table_details")
+    def information_details():
+        df_info = spark.read.table("system.information_schema.tables").select(
+            F.col("table_catalog"),
+            F.col("table_schema"),
+            F.col("table_name"),
+            F.col("table_type"),
+            F.col("data_source_format"),
+            F.col("storage_path"),
+            F.lit(None).alias("status"),
+        )
+
+        df_hms = spark.read.table("hms_details").select(
+            F.col("catalog").alias("table_catalog"),
+            F.col("database").alias("table_schema"),
+            F.col("name").alias("table_name"),
+            F.col("table_type"),
+            F.upper(F.col("table_format")).alias("data_source_format"),
+            F.col("location_uri").alias("storage_path"),
+            F.col("status"),
+        )
+
+        df_table_details = df_info.unionByName(df_hms, allowMissingColumns=True)
+
+        df = df_table_details.select(
+            F.col("table_catalog"),
+            F.col("table_schema"),
+            F.col("table_name"),
+            F.concat_ws(
+                ".", F.col("table_catalog"), F.col("table_schema"), F.col("table_name")
+            ).alias("full_namespace"),
+            F.col("storage_path"),
+            F.coalesce(parse_storage_path(F.col("storage_path")), F.lit(None)).alias(
+                "parsed_path"
             ),
-        ).alias("storage_path"),
-        F.coalesce(F.col("info.table_type"), F.lit("EXTERNAL")).alias("table_type"),
-        F.coalesce(F.col("info.data_source_format"), F.lit("DELTA")).alias(
-            "data_source_format"
-        ),
-        F.col("insights.category"),
-        F.col("insights.operationName"),
-        F.col("insights.statusText"),
-        F.col("insights.durationMs"),
-        F.col("insights.callerIpAddress"),
-        F.col("insights.identity.type").alias("authType"),
-        F.col("insights.identity.requester.objectId").alias("authObjectId"),
-        F.col("insights.properties.userAgentHeader").alias("userAgentHeader"),
-        F.col("insights.properties.clientRequestId").alias("clientRequestId"),
-        F.col("insights.properties.objectKey").alias("objectKey"),
-    )
+            F.col("table_type"),
+            F.col("data_source_format"),
+            F.col("status"),
+        ).withColumn(
+            "processed_date", lit(processed_date)
+        ).withColumn(
+                "sourced_from_cloudlogs", lit(sourced_from_cloudlogs))
 
-    df_result = df_result.where(
-        (
-            F.col("insights.category").isin(
-                "StorageWrite", "StorageDelete", "StorageRead"
+        df = df.where(
+            (~F.col("table_catalog").isin("system", "__databricks_internal"))
+            & (~F.col("table_name").like("__materialization%"))
+            & (
+                (F.col("table_type").isin("MANAGED", "EXTERNAL"))
+                | (F.col("table_type").isNull())
+            )
+            & (
+                (~F.col("data_source_format").isin("DELTASHARING"))
+                | (F.col("data_source_format").isNull())
             )
         )
-        & (~F.col("insights.properties.objectKey").like("%unity%"))
-        & (F.col("insights.statusText") == "Success")
-    )
 
-    return df_result
+        df = collect_table_details(spark=spark, df=df, schema=table_details_schema)
+
+        return df
+
+
+    @dlt.table
+    def azure_application_details():
+        try:
+            df_creds = spark.read.table("system.information_schema.storage_credentials")
+
+            app_names: list[str] = (
+                df_creds.select(
+                    F.collect_set(
+                        F.regexp_extract("credential", "accessConnectors/(.*?),mi_id", 1)
+                    ).alias("access_connector_name")
+                )
+                .first()
+                .access_connector_name
+            )
+
+            if app_names:
+                return azure_apps(
+                    spark=spark,
+                    tenant_id=tenant_id,
+                    client_id=client_id,
+                    client_secret=client_secret,
+                    app_names=app_names,
+                    schema=azure_apps_schema,
+                )
+            return spark.createDataFrame([], azure_apps_schema)
+        except Exception:
+            return spark.createDataFrame([], azure_apps_schema)
+
+
+    @dlt.table
+    def azure_storage_logs():
+        df_insights = spark.read.table("azure_storage_logs_raw").alias("insights")
+        df_info = spark.read.table("all_table_details").alias("info")
+
+        df_join = df_insights.join(
+            df_info,
+            on=F.expr(
+                "insights.properties.objectKey LIKE CONCAT('%', info.parsed_path, '%') AND info.parsed_path != ''"
+            ),
+            how="left",
+        )
+
+        # Select and transform the required columns
+        df_result = df_join.select(
+            F.to_timestamp(F.col("insights.time")).alias("storage_time"),
+            F.split(F.col("insights.resourceId"), "/")[2].alias("subscription_id"),
+            F.split(F.col("insights.resourceId"), "/")[4].alias("resource_group"),
+            F.split(F.col("insights.resourceId"), "/")[8].alias("storage_account"),
+            F.coalesce(F.col("info.table_catalog"), F.lit("foreign")).alias(
+                "table_catalog"
+            ),
+            F.coalesce(F.col("info.table_schema"), F.lit("foreign")).alias("table_schema"),
+            F.coalesce(F.col("info.table_name"), F.lit("foreign")).alias("table_name"),
+            F.coalesce(F.col("info.full_namespace"), F.lit("foreign")).alias(
+                "full_namespace"
+            ),
+            F.col("info.table_details"),
+            F.col("info.status").alias("table_status"),
+            F.coalesce(
+                F.col("info.storage_path"),
+                F.concat(
+                    F.lit("abfss://"),
+                    F.regexp_extract(
+                        F.regexp_extract(
+                            F.col("insights.properties.objectKey"), "(.*)(/_delta_log)", 1
+                        ),
+                        "^/[^/]+/([^/]+)",
+                        1,
+                    ),
+                    F.lit("@"),
+                    F.regexp_extract(
+                        F.regexp_extract(
+                            F.col("insights.properties.objectKey"), "(.*)(/_delta_log)", 1
+                        ),
+                        "^/([^/]+)",
+                        1,
+                    ),
+                    F.lit(".dfs.core.windows.net/"),
+                    F.regexp_extract(
+                        F.regexp_extract(
+                            F.col("insights.properties.objectKey"), "(.*)(/_delta_log)", 1
+                        ),
+                        "^/[^/]+/[^/]+/(.*)",
+                        1,
+                    ),
+                ),
+            ).alias("storage_path"),
+            F.coalesce(F.col("info.table_type"), F.lit("EXTERNAL")).alias("table_type"),
+            F.coalesce(F.col("info.data_source_format"), F.lit("DELTA")).alias(
+                "data_source_format"
+            ),
+            F.col("insights.category"),
+            F.col("insights.operationName"),
+            F.col("insights.statusText"),
+            F.col("insights.durationMs"),
+            F.col("insights.callerIpAddress"),
+            F.col("insights.identity.type").alias("authType"),
+            F.col("insights.identity.requester.objectId").alias("authObjectId"),
+            F.col("insights.properties.userAgentHeader").alias("userAgentHeader"),
+            F.col("insights.properties.clientRequestId").alias("clientRequestId"),
+            F.col("insights.properties.objectKey").alias("objectKey"),
+            F.col("processed_date"),
+            F.col("sourced_from_cloudlogs")
+        )
+
+        df_result = df_result.where(
+            (
+                F.col("insights.category").isin(
+                    "StorageWrite", "StorageDelete", "StorageRead"
+                )
+            )
+            & (~F.col("insights.properties.objectKey").like("%unity%"))
+            & (F.col("insights.statusText") == "Success")
+        )
+
+        return df_result
+else:
+        # crawl all the tables in hive_metastore
+    @dlt.table(name="hms_details")
+    def gather_hms_details() -> DataFrame:
+        hms_catalog = "hive_metastore"
+        table_details: list[dict[str, str | None]] = []
+        filter_statement = (
+            (F.col("col_name") == "Catalog")
+            | (F.col("col_name") == "Database")
+            | (F.col("col_name") == "Table")
+            | (F.col("col_name") == "Type")
+            | (F.col("col_name") == "Provider")
+            | (F.col("col_name") == "Location")
+        )
+
+        dbs = spark.sql(f"SHOW SCHEMAS IN {hms_catalog}")
+
+        for db in dbs.collect():
+            tables = spark.sql(f"SHOW TABLES IN {hms_catalog}.{db.databaseName}")
+            for table in tables.collect():
+                if table.isTemporary:
+                    continue
+
+                namespace = f"`{hms_catalog}`.`{table.database}`.`{table.tableName}`"
+                try:
+                    tbl_metadata = spark.sql(f"DESCRIBE EXTENDED {namespace}").filter(
+                        filter_statement
+                    )
+                    tbl_metadata = (
+                        tbl_metadata.groupBy()
+                        .pivot("col_name")
+                        .agg({"data_type": "first"})
+                        .first()
+                    )
+
+                    table_details.append(
+                        {
+                            "catalog": tbl_metadata.Catalog,
+                            "database": tbl_metadata.Database,
+                            "name": tbl_metadata.Table,
+                            "table_format": tbl_metadata.Provider,
+                            "table_type": tbl_metadata.Type,
+                            "location_uri": tbl_metadata.Location,
+                            "status": None,
+                        }
+                    )
+
+                except Exception as exc:
+                    print(f"fail {namespace}")
+                    table_details.append(
+                        {
+                            "catalog": hms_catalog,
+                            "database": table.database,
+                            "name": table.tableName,
+                            "table_format": None,
+                            "table_type": None,
+                            "location_uri": None,
+                            "status": str(exc),
+                        }
+                    )
+
+        return spark.createDataFrame(data=table_details, schema=hms_table_schema)
+
+
+    @dlt.table(name="all_table_details")
+    def information_details():
+        df_info = spark.read.table("system.information_schema.tables").select(
+            F.col("table_catalog"),
+            F.col("table_schema"),
+            F.col("table_name"),
+            F.col("table_type"),
+            F.col("data_source_format"),
+            F.col("storage_path"),
+            F.lit(None).alias("status"),
+        )
+
+        df_hms = spark.read.table("hms_details").select(
+            F.col("catalog").alias("table_catalog"),
+            F.col("database").alias("table_schema"),
+            F.col("name").alias("table_name"),
+            F.col("table_type"),
+            F.upper(F.col("table_format")).alias("data_source_format"),
+            F.col("location_uri").alias("storage_path"),
+            F.col("status"),
+        )
+
+        df_table_details = df_info.unionByName(df_hms, allowMissingColumns=True)
+
+        df = df_table_details.select(
+            F.col("table_catalog"),
+            F.col("table_schema"),
+            F.col("table_name"),
+            F.concat_ws(
+                ".", F.col("table_catalog"), F.col("table_schema"), F.col("table_name")
+            ).alias("full_namespace"),
+            F.col("storage_path"),
+            F.coalesce(parse_storage_path(F.col("storage_path")), F.lit(None)).alias(
+                "parsed_path"
+            ),
+            F.col("table_type"),
+            F.col("data_source_format"),
+            F.col("status"),
+        ).withColumn(
+            "processed_date", lit(processed_date)
+        ).withColumn(
+                "sourced_from_cloudlogs", lit(sourced_from_cloudlogs))
+
+        df = df.where(
+            (~F.col("table_catalog").isin("system", "__databricks_internal"))
+            & (~F.col("table_name").like("__materialization%"))
+            & (
+                (F.col("table_type").isin("MANAGED", "EXTERNAL"))
+                | (F.col("table_type").isNull())
+            )
+            & (
+                (~F.col("data_source_format").isin("DELTASHARING"))
+                | (F.col("data_source_format").isNull())
+            )
+        )
+
+        df = collect_table_details(spark=spark, df=df, schema=table_details_schema)
+
+        return df
+
+
+    @dlt.table
+    def azure_application_details():
+        try:
+            df_creds = spark.read.table("system.information_schema.storage_credentials")
+
+            app_names: list[str] = (
+                df_creds.select(
+                    F.collect_set(
+                        F.regexp_extract("credential", "accessConnectors/(.*?),mi_id", 1)
+                    ).alias("access_connector_name")
+                )
+                .first()
+                .access_connector_name
+            )
+
+            if app_names:
+                return azure_apps(
+                    spark=spark,
+                    tenant_id=tenant_id,
+                    client_id=client_id,
+                    client_secret=client_secret,
+                    app_names=app_names,
+                    schema=azure_apps_schema,
+                )
+            return spark.createDataFrame([], azure_apps_schema)
+        except Exception:
+            return spark.createDataFrame([], azure_apps_schema)
+    @dlt.table
+    def azure_storage_logs():
+        #df_insights = spark.read.table("azure_storage_logs_raw").alias("insights")
+        df_info = spark.read.table("all_table_details").alias("info")
+
+        # df_join = df_insights.join(
+        #     df_info,
+        #     on=F.expr(
+        #         "insights.properties.objectKey LIKE CONCAT('%', info.parsed_path, '%') AND info.parsed_path != ''"
+        #     ),
+        #     how="left",
+        # )
+
+        # Select and transform the required columns
+        df_result = df_info.select(
+            F.lit(None).cast("timestamp").alias("storage_time"),
+            F.lit(None).cast("string").alias("subscription_id"),
+            F.lit(None).cast("string").alias("resource_group"),
+            F.lit(None).cast("string").alias("storage_account"),
+            F.coalesce(F.col("info.table_catalog"), F.lit("foreign")).alias(
+                "table_catalog"
+            ),
+            F.coalesce(F.col("info.table_schema"), F.lit("foreign")).alias("table_schema"),
+            F.coalesce(F.col("info.table_name"), F.lit("foreign")).alias("table_name"),
+            F.coalesce(F.col("info.full_namespace"), F.lit("foreign")).alias(
+                "full_namespace"
+            ),
+            F.col("info.table_details"),
+            F.col("info.status").alias("table_status"),
+            F.coalesce(
+                F.col("info.storage_path"),
+                F.concat(
+                    F.lit("abfss://"),
+                    F.lit("@"),
+                    F.lit(".dfs.core.windows.net/")
+                ),
+            ).alias("storage_path"),
+            F.coalesce(F.col("info.table_type"), F.lit("EXTERNAL")).alias("table_type"),
+            F.coalesce(F.col("info.data_source_format"), F.lit("DELTA")).alias(
+                "data_source_format"
+            ),
+            F.lit(None).alias("category"),
+            F.lit(None).alias("operationName"),
+            F.lit(None).alias("statusText"),
+            F.lit(None).alias("durationMs"),
+            F.lit(None).alias("callerIpAddress"),
+            F.lit(None).alias("authType"),
+            F.lit(None).alias("authObjectId"),
+            F.lit(None).alias("userAgentHeader"),
+            F.lit(None).alias("clientRequestId"),
+            F.lit(None).alias("objectKey"),
+            F.col("processed_date"),
+            F.col("sourced_from_cloudlogs")
+        )
+
+        return df_result    
+import requests
+url = spark.conf.get("datbricksUrl")
+headers = {"Authorization": f"Bearer {dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()}"}
+response = requests.get(url, headers=headers)
+data = response.json().get("credentials", [])
+
+# Create a DataFrame from the fetched data
+df = spark.createDataFrame(data)
+
+# Define a DLT table to save the DataFrame
+@dlt.table(
+    name="role_arn_credentials",
+    comment="Table containing role ARN credentials extracted from Unity Catalog API"
+)
+def role_arn_credentials():
+    df_exploded = df.withColumn("role_arn", F.col("azure_managed_identity")["access_connector_id"])
+    return df_exploded
+        
